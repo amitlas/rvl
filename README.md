@@ -35,6 +35,13 @@ Fallback is automatic: the selected provider first, then its other models
 (each has its own free quota), then the other providers with a key, and
 Chrome built-in AI last. Keys stay in this browser only (`chrome.storage.local`).
 
+## Chrome Web Store
+
+Publishing (unlisted, one-click install link) is prepared in `store/`:
+`sh scripts/package.sh` builds `dist/rvl.zip`, and `store/listing.md` has
+every text field, the permission justifications and the privacy answers.
+Privacy policy: [PRIVACY.md](PRIVACY.md).
+
 ## Shortcut
 
 Default Ctrl+Z. On Windows that replaces Undo inside Chrome while rvl is on.

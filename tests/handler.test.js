@@ -155,3 +155,22 @@ test("no key but a keyless provider still asks instead of stopping", async () =>
   assert.equal(f.opened(), 0);
   assert.equal(f.shown[1].kind, "result");
 });
+
+test("manifest icons exist at their declared sizes (store requirement)", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const manifest = JSON.parse(await readFile(new URL("../manifest.json", import.meta.url), "utf8"));
+  for (const [size, path] of Object.entries(manifest.icons)) {
+    const png = await readFile(new URL(`../${path}`, import.meta.url));
+    // PNG IHDR: width and height are big-endian at bytes 16 and 20.
+    assert.equal(png.readUInt32BE(16), Number(size), path);
+    assert.equal(png.readUInt32BE(20), Number(size), path);
+  }
+  assert.ok(manifest.icons["128"], "the store needs a 128px icon");
+});
+
+test("the settings page discloses what is sent and links the privacy policy", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const html = await readFile(new URL("../options/options.html", import.meta.url), "utf8");
+  assert.match(html, /selected text goes to the provider you chose/);
+  assert.match(html, /PRIVACY\.md/);
+});
