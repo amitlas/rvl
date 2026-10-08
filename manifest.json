@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "rvl",
+  "description": "Select a multiple-choice question, right-click rvl (or Ctrl+Z), and see the correct option.",
+  "version": "0.1.0",
+  "permissions": [
+    "contextMenus",
+    "storage",
+    "activeTab",
+    "scripting",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "https://generativelanguage.googleapis.com/*",
+    "https://api.groq.com/*",
+    "https://openrouter.ai/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "commands": {
+    "rvl": {
+      "suggested_key": {
+        "default": "Ctrl+Z",
+        "mac": "MacCtrl+Z"
+      },
+      "description": "Reveal the answer to the selected question"
+    }
+  },
+  "action": {
+    "default_title": "rvl settings"
+  },
+  "options_page": "options/options.html",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+  }
+}

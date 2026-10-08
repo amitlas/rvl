@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>rvl options</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; max-width: 520px; margin: 32px auto; padding: 0 16px; }
+    label { display: block; margin-top: 16px; font-weight: 600; }
+    input, select { width: 100%; box-sizing: border-box; padding: 6px 8px; font: inherit; }
+    button { margin-top: 16px; padding: 6px 16px; font: inherit; }
+    .hint { color: #666; font-size: 12px; }
+    .ok { color: #15803d; }
+    .bad { color: #b91c1c; }
+  </style>
+</head>
+<body>
+  <h1>rvl</h1>
+  <p>Select a multiple-choice question, then right-click <b>rvl</b> or press the shortcut.</p>
+
+  <label>Keyboard shortcut</label>
+  <div><b id="shortcut">...</b> <button id="changeShortcut" type="button">Change</button></div>
+  <div class="hint">Default Ctrl+Z on Mac and Windows (on Windows it replaces Undo inside Chrome while rvl is on). Chrome rejects Cmd+Option combinations. Change it to any modifier plus a letter, digit, period or comma.</div>
+
+  <label for="provider">AI provider</label>
+  <select id="provider"></select>
+  <div class="hint">Save a key for more than one provider: if the selected one fails or runs out of free quota, rvl automatically tries the others.</div>
+  <div id="savedKeys" class="hint"></div>
+
+  <div id="keyedSection">
+    <label for="apiKey">API key</label>
+    <input id="apiKey" type="password" autocomplete="off" spellcheck="false">
+    <div class="hint">Free key from <a id="keyUrl" target="_blank" rel="noopener"></a>. Stored only in this browser.</div>
+
+    <label for="model">Model</label>
+    <select id="model"></select>
+    <div class="hint">If a model runs out of free quota, rvl tries the provider's other models, then the other providers that have a key.</div>
+  </div>
+
+  <div id="localSection">
+    <label>Chrome built-in AI</label>
+    <div><span id="localStatus">Checking...</span> <button id="downloadModel" type="button" hidden>Download model</button></div>
+    <div class="hint">Runs on this computer: no key, no quota, but less accurate than the cloud providers.
+      Needs a recent Chrome, about 22 GB free disk and 16 GB RAM (or a GPU with more than 4 GB).
+      It is always the last fallback when the providers with a key fail.</div>
+  </div>
+
+  <label><input id="allowMultiple" type="checkbox" style="width:auto"> Allow two correct answers</label>
+  <div class="hint">Usually one answer is shown. When on, it may show two (for example "A, C"), only if two are correct. Never more.</div>
+
+  <button id="save">Save and test</button>
+  <div id="status"></div>
+
+  <script type="module" src="options.js"></script>
+</body>
+</html>
