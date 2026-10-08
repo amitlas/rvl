@@ -25,6 +25,27 @@ const NEEDS_KEY = "add a free API key in rvl options";
 // The handler recognizes this exact text and opens the options page, where
 // the Download model button is.
 export const MODEL_NOT_DOWNLOADED = "Download the AI model first: rvl settings opened, click Download model";
+export const MODEL_DOWNLOADING = "The free AI model is downloading (one time, a few minutes). Try again soon.";
+
+// Starts the one-time model download. Chrome may require a user click for
+// it; whether an extension context counts varies, so just try. Resolves
+// "done" (ready now), "started" (still downloading) or "refused".
+export async function startDownload(LM = globalThis.LanguageModel, { waitMs = 1500, onProgress } = {}) {
+  if (!LM) return "refused";
+  let creating;
+  try {
+    creating = LM.create(onProgress ? {
+      monitor(m) { m.addEventListener("downloadprogress", (e) => onProgress(e.loaded)); },
+    } : undefined);
+  } catch {
+    return "refused";
+  }
+  creating.then((s) => s?.destroy?.(), () => {});
+  return Promise.race([
+    creating.then(() => "done", () => "refused"),
+    new Promise((resolve) => setTimeout(() => resolve("started"), waitMs)),
+  ]);
+}
 
 export async function chromeAIStatus(LM = globalThis.LanguageModel) {
   if (!LM) return "unsupported";
@@ -40,10 +61,13 @@ export async function askChromeAI(question, { allowMultiple = true, LM = globalT
   if (status === "unsupported" || status === "unavailable") {
     throw new Error(`Chrome built-in AI is not available on this computer, ${NEEDS_KEY}`);
   }
+  if (status === "downloading") throw new Error(MODEL_DOWNLOADING);
   if (status !== "available") {
-    // "downloadable" / "downloading": the download needs a click, which the
-    // options page provides.
-    throw new Error(MODEL_NOT_DOWNLOADED);
+    // "downloadable": try to start the download right here; if Chrome wants a
+    // click for it, the options page has the button.
+    const started = await startDownload(LM);
+    if (started === "started") throw new Error(MODEL_DOWNLOADING);
+    if (started === "refused") throw new Error(MODEL_NOT_DOWNLOADED);
   }
   const session = await LM.create({
     initialPrompts: [{ role: "system", content: buildInstructions({ allowMultiple }) }],

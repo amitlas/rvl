@@ -1,7 +1,7 @@
 import { PROVIDERS, fetchModels, modelOptions, askChain, chainFromStorage, TEST_QUESTION, TEST_EXPECTED } from "../src/providers.js";
 import { describeTestResult } from "../src/keytest.js";
 import { normalizeStored, withEdit, withProvider } from "../src/options-state.js";
-import { chromeAIStatus, describeLocalStatus } from "../src/chromeai.js";
+import { chromeAIStatus, describeLocalStatus, startDownload } from "../src/chromeai.js";
 
 const providerSelect = document.getElementById("provider");
 const apiKeyInput = document.getElementById("apiKey");
@@ -42,30 +42,46 @@ async function loadLiveModels(id) {
   if (request === liveRequest && providerSelect.value === id) fillModels(id, live);
 }
 
-// Status line and download button for the on-device model. The download
-// has to start from a click, so it can only happen here, not from a page.
+// Status line and download button for the on-device model. Chrome may want
+// a click to start the download, so any click or key on this page also
+// starts it, and the status is polled so progress is always visible.
+const localStatusLine = document.getElementById("localStatus");
+const downloadButton = document.getElementById("downloadModel");
+let pollTimer = null;
+
 async function refreshLocalStatus() {
   const status = await chromeAIStatus();
-  document.getElementById("localStatus").textContent = describeLocalStatus(status);
-  document.getElementById("downloadModel").hidden = status !== "downloadable";
+  if (!downloading || status !== "downloading") localStatusLine.textContent = describeLocalStatus(status);
+  downloadButton.hidden = status !== "downloadable";
+  clearTimeout(pollTimer);
+  if (status === "downloadable" || status === "downloading") pollTimer = setTimeout(refreshLocalStatus, 2000);
+  return status;
 }
 
-document.getElementById("downloadModel").addEventListener("click", async () => {
-  const statusLine = document.getElementById("localStatus");
-  try {
-    await LanguageModel.create({
-      monitor(m) {
-        m.addEventListener("downloadprogress", (e) => {
-          statusLine.textContent = `Downloading the model... ${Math.round(e.loaded * 100)}%`;
-        });
-      },
-    });
-  } catch (err) {
-    statusLine.textContent = `Download failed: ${err?.message || err}`;
+let downloading = false;
+async function beginDownload() {
+  if (downloading || (await chromeAIStatus()) !== "downloadable") return;
+  downloading = true;
+  localStatusLine.textContent = "Starting the download...";
+  const result = await startDownload(globalThis.LanguageModel, {
+    waitMs: 4000,
+    onProgress: (loaded) => { localStatusLine.textContent = `Downloading the model... ${Math.round(loaded * 100)}%`; },
+  });
+  if (result === "refused") {
+    downloading = false;
+    localStatusLine.textContent = "Chrome did not start the download. Check chrome://on-device-internals, or add a free API key.";
     return;
   }
+  if (result === "done") downloading = false;
   refreshLocalStatus();
-});
+}
+
+downloadButton.addEventListener("click", beginDownload);
+// Any interaction with the page counts as the click Chrome may require.
+document.addEventListener("pointerdown", beginDownload, { once: true });
+document.addEventListener("keydown", beginDownload, { once: true });
+// And try once right away, in case no click is needed at all.
+beginDownload();
 
 function fillProvider(id) {
   const p = PROVIDERS[id];

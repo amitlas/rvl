@@ -321,7 +321,8 @@ test("askChromeAI asks with the instructions and a JSON schema, then cleans up",
 test("askChromeAI explains unavailable and not-downloaded states", async () => {
   await assert.rejects(askChromeAI("Q", { LM: undefined }), /not available on this computer.*API key/);
   await assert.rejects(askChromeAI("Q", { LM: fakeLM({ status: "unavailable" }) }), /not available/);
-  await assert.rejects(askChromeAI("Q", { LM: fakeLM({ status: "downloadable" }) }), /Download the AI model first/);
+  const refusing = { ...fakeLM({ status: "downloadable" }), create: async () => { throw new Error("NotAllowedError"); } };
+  await assert.rejects(askChromeAI("Q", { LM: refusing }), /Download the AI model first/);
   await assert.rejects(askChromeAI("Q", { LM: fakeLM({ reply: "nope" }) }), /unreadable/);
 });
 
@@ -332,4 +333,21 @@ test("chromeAIStatus and describeLocalStatus", async () => {
   assert.equal(describeLocalStatus("available"), "Ready.");
   assert.match(describeLocalStatus("downloadable"), /not downloaded/);
   assert.match(describeLocalStatus("unavailable"), /API key/);
+});
+
+import { startDownload, MODEL_DOWNLOADING } from "../src/chromeai.js";
+
+test("startDownload reports done, started or refused", async () => {
+  const lm = (create) => ({ create });
+  assert.equal(await startDownload(lm(async () => ({ destroy() {} })), { waitMs: 50 }), "done");
+  assert.equal(await startDownload(lm(() => new Promise(() => {})), { waitMs: 20 }), "started");
+  assert.equal(await startDownload(lm(async () => { throw new Error("NotAllowedError"); }), { waitMs: 50 }), "refused");
+  assert.equal(await startDownload(undefined), "refused");
+});
+
+test("askChromeAI starts the download itself and says it is downloading", async () => {
+  const LM = { availability: async () => "downloadable", create: () => new Promise(() => {}) };
+  // startDownload's default wait is 1.5s; a never-resolving create means "started".
+  await assert.rejects(askChromeAI("Q", { LM }), (e) => e.message === MODEL_DOWNLOADING);
+  await assert.rejects(askChromeAI("Q", { LM: { availability: async () => "downloading" } }), (e) => e.message === MODEL_DOWNLOADING);
 });

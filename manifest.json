@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "rvl",
   "description": "Select a multiple-choice question and see the correct option's letter in a small box. Works with Chrome's built-in AI or a free API key.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "permissions": [
     "contextMenus",
     "storage",
