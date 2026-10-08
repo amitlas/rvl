@@ -174,3 +174,11 @@ test("the settings page discloses what is sent and links the privacy policy", as
   assert.match(html, /selected text goes to the provider you chose/);
   assert.match(html, /PRIVACY\.md/);
 });
+
+test("the short download page redirects to the latest release zip", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const html = await readFile(new URL("../docs/index.html", import.meta.url), "utf8");
+  const target = "https://github.com/amitlas/rvl/releases/latest/download/rvl.zip";
+  assert.ok(html.includes(`content="0; url=${target}"`));
+  assert.ok(html.includes(`href="${target}"`));
+});
