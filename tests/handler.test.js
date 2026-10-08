@@ -182,3 +182,21 @@ test("the short download page redirects to the latest release zip", async () => 
   assert.ok(html.includes(`content="0; url=${target}"`));
   assert.ok(html.includes(`href="${target}"`));
 });
+
+import { MODEL_NOT_DOWNLOADED } from "../src/chromeai.js";
+
+test("model not downloaded: shows a clear message and opens settings", async () => {
+  const f = fakeDeps({
+    getSettings: async () => ({ provider: "chrome", apiKey: "", keyless: true }),
+    ask: async () => { throw new Error(MODEL_NOT_DOWNLOADED); },
+  });
+  await handleRvl({}, f.deps);
+  assert.equal(f.shown[1].text, MODEL_NOT_DOWNLOADED);
+  assert.equal(f.opened(), 1);
+});
+
+test("other errors do not open settings", async () => {
+  const f = fakeDeps({ ask: async () => { throw new Error("quota"); } });
+  await handleRvl({}, f.deps);
+  assert.equal(f.opened(), 0);
+});

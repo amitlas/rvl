@@ -321,7 +321,7 @@ test("askChromeAI asks with the instructions and a JSON schema, then cleans up",
 test("askChromeAI explains unavailable and not-downloaded states", async () => {
   await assert.rejects(askChromeAI("Q", { LM: undefined }), /not available on this computer.*API key/);
   await assert.rejects(askChromeAI("Q", { LM: fakeLM({ status: "unavailable" }) }), /not available/);
-  await assert.rejects(askChromeAI("Q", { LM: fakeLM({ status: "downloadable" }) }), /not downloaded yet/);
+  await assert.rejects(askChromeAI("Q", { LM: fakeLM({ status: "downloadable" }) }), /Download the AI model first/);
   await assert.rejects(askChromeAI("Q", { LM: fakeLM({ reply: "nope" }) }), /unreadable/);
 });
 

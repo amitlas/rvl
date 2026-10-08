@@ -2,6 +2,7 @@
 // plain fakes. background.js supplies the real deps.
 
 import { cleanQuestion } from "./gemini.js";
+import { MODEL_NOT_DOWNLOADED } from "./chromeai.js";
 
 // deps:
 //   readSelection() -> Promise<string>   selected text from the page ("" if none)
@@ -38,7 +39,10 @@ export async function handleRvl({ selectionText = "" } = {}, deps) {
     const shown = chooseAnswer(result, { allowMultiple: settings.allowMultiple !== false });
     await deps.show({ kind: "result", answer: shown, reason: result.reason });
   } catch (err) {
-    await deps.show({ kind: "error", text: err?.message || "Something went wrong" });
+    const text = err?.message || "Something went wrong";
+    await deps.show({ kind: "error", text });
+    // The download needs a click on the settings page, so take the user there.
+    if (text.includes(MODEL_NOT_DOWNLOADED)) deps.openOptions();
   }
 }
 

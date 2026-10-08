@@ -22,6 +22,9 @@ const SCHEMA = {
 };
 
 const NEEDS_KEY = "add a free API key in rvl options";
+// The handler recognizes this exact text and opens the options page, where
+// the Download model button is.
+export const MODEL_NOT_DOWNLOADED = "Download the AI model first: rvl settings opened, click Download model";
 
 export async function chromeAIStatus(LM = globalThis.LanguageModel) {
   if (!LM) return "unsupported";
@@ -40,7 +43,7 @@ export async function askChromeAI(question, { allowMultiple = true, LM = globalT
   if (status !== "available") {
     // "downloadable" / "downloading": the download needs a click, which the
     // options page provides.
-    throw new Error(`Chrome built-in AI model is not downloaded yet: open rvl options, or ${NEEDS_KEY}`);
+    throw new Error(MODEL_NOT_DOWNLOADED);
   }
   const session = await LM.create({
     initialPrompts: [{ role: "system", content: buildInstructions({ allowMultiple }) }],
