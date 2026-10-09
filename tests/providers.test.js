@@ -69,7 +69,7 @@ test("ask routes gemini to the Gemini API and others to their base URL", async (
 
 test("resolveSettings falls back to the default provider and model", () => {
   assert.deepEqual(resolveSettings({ provider: "nope", apiKey: " k " }), {
-    provider: "chrome", apiKey: "k", model: "gemini-nano", allowMultiple: true,
+    provider: "pollinations", apiKey: "k", model: "openai", allowMultiple: true,
   });
   assert.equal(resolveSettings({ provider: "groq", model: "" }).model, PROVIDERS.groq.defaultModel);
 });
@@ -133,12 +133,12 @@ test("allowMultiple reaches both request formats", async () => {
 
 test("chainFromStorage puts the selected provider first and skips providers without a key", () => {
   const chain = chainFromStorage({ provider: "groq", keys: { gemini: "g", groq: "q", openrouter: "" }, allowMultiple: false });
-  assert.deepEqual(providerOrder(chain), ["groq", "gemini", "chrome"]);
+  assert.deepEqual(providerOrder(chain), ["groq", "gemini", "pollinations"]);
   assert.ok(chain.filter((c) => c.provider === "groq").every((c) => c.apiKey === "q"));
   assert.ok(chain.every((c) => c.allowMultiple === false));
-  assert.deepEqual(providerOrder(chainFromStorage({ provider: "groq", keys: { openrouter: "o" } })), ["openrouter", "chrome"]);
-  assert.deepEqual(providerOrder(chainFromStorage({})), ["chrome"]);
-  assert.deepEqual(providerOrder(chainFromStorage({ apiKey: "old" })), ["gemini", "chrome"]);
+  assert.deepEqual(providerOrder(chainFromStorage({ provider: "groq", keys: { openrouter: "o" } })), ["openrouter", "pollinations"]);
+  assert.deepEqual(providerOrder(chainFromStorage({})), ["pollinations"]);
+  assert.deepEqual(providerOrder(chainFromStorage({ apiKey: "old" })), ["gemini", "pollinations"]);
 });
 
 function routedFetch(statusByHost) {
@@ -174,18 +174,19 @@ test("askChain stops at the first provider that works", async () => {
 
 test("askChain reports every failure when all providers fail", async () => {
   const chain = chainFromStorage({ provider: "gemini", keys: { gemini: "g", groq: "q", openrouter: "o" } });
-  const { fetchFn } = routedFetch({ "generativelanguage.googleapis.com": 429, "api.groq.com": 401, "openrouter.ai": 500 });
+  const { fetchFn } = routedFetch({ "generativelanguage.googleapis.com": 429, "api.groq.com": 401, "openrouter.ai": 500, "text.pollinations.ai": 503 });
   await assert.rejects(askChain("Q", chain, { fetchFn }), (err) => {
     assert.match(err.message, /^All providers failed/);
     assert.match(err.message, /gemini: .*quota/);
     assert.match(err.message, /groq: Invalid API key/);
     assert.match(err.message, /openrouter: /);
+    assert.match(err.message, /pollinations: /);
     return true;
   });
 });
 
 test("askChain with one provider shows its own error unchanged", async () => {
-  const chain = chainFromStorage({ provider: "gemini", keys: { gemini: "g" } });
+  const chain = chainFromStorage({ provider: "gemini", keys: { gemini: "g" } }).filter((c) => c.provider === "gemini");
   const { fetchFn } = routedFetch({ "generativelanguage.googleapis.com": 429 });
   await assert.rejects(askChain("Q", chain, { fetchFn }), /Gemini free-tier quota reached/);
   await assert.rejects(askChain("Q", [], { fetchFn }), /Set an API key/);
@@ -200,7 +201,7 @@ test("typing a key for one provider never drops another provider's key", () => {
   s = withEdit(s, "groq", { key: "gsk_Y", model: "" });
   assert.deepEqual(s.keys, { gemini: "AIzaX", groq: "gsk_Y" });
   assert.equal(s.provider, "groq");
-  assert.deepEqual(providerOrder(chainFromStorage(s)), ["groq", "gemini", "chrome"]);
+  assert.deepEqual(providerOrder(chainFromStorage(s)), ["groq", "gemini", "pollinations"]);
 });
 
 test("normalizeStored keeps a 0.1 single Gemini key and defaults", () => {
@@ -208,7 +209,7 @@ test("normalizeStored keeps a 0.1 single Gemini key and defaults", () => {
     provider: "gemini", keys: { gemini: "old" }, models: { gemini: "m" }, allowMultiple: true,
   });
   assert.equal(normalizeStored({ keys: { gemini: "new" }, apiKey: "old" }).keys.gemini, "new");
-  assert.equal(normalizeStored({ provider: "bogus" }).provider, "chrome");
+  assert.equal(normalizeStored({ provider: "bogus" }).provider, "pollinations");
   assert.equal(normalizeStored({ keys: { groq: "q" } }).provider, "groq");
   assert.equal(normalizeStored({ allowMultiple: false }).allowMultiple, false);
 });
@@ -286,10 +287,21 @@ function fakeLM({ status = "available", reply = '{"options":[{"label":"B","corre
   };
 }
 
-test("with no keys the keyless Chrome AI is the default and only provider", () => {
+test("with no keys the keyless Pollinations is the default; Chrome AI is never added on its own", () => {
   const chain = chainFromStorage({});
-  assert.deepEqual(chain.map((c) => c.provider), ["chrome"]);
-  assert.equal(settingsFromStorage({}).provider, "chrome");
+  assert.deepEqual(chain.map((c) => c.provider), ["pollinations"]);
+  assert.equal(settingsFromStorage({}).provider, "pollinations");
+  assert.ok(!chainFromStorage({ keys: { gemini: "g" } }).some((c) => c.provider === "chrome"));
+  assert.equal(chainFromStorage({ provider: "chrome" })[0].provider, "chrome");
+});
+
+test("Pollinations is called without a key or Authorization header", async () => {
+  let seen;
+  const fetchFn = async (url, init) => { seen = { url, init }; return { status: 200, json: async () => chatBody('{"answer":"B"}') }; };
+  assert.equal((await ask("Q", { provider: "pollinations" }, { fetchFn })).answer, "B");
+  assert.equal(seen.url, "https://text.pollinations.ai/openai");
+  assert.equal(seen.init.headers.Authorization, undefined);
+  assert.equal(JSON.parse(seen.init.body).model, "openai");
 });
 
 test("ask routes the chrome provider to the local model, not the network", async () => {
@@ -301,11 +313,11 @@ test("ask routes the chrome provider to the local model, not the network", async
   assert.equal(localCalls, 1);
 });
 
-test("askChain falls back to the local model when every keyed provider fails", async () => {
+test("askChain falls back to keyless Pollinations when every keyed provider fails", async () => {
   const chain = chainFromStorage({ provider: "gemini", keys: { gemini: "g" } });
-  const { fetchFn } = routedFetch({ "generativelanguage.googleapis.com": 429 });
-  const localAsk = async () => ({ answer: "L", reason: "", options: [] });
-  assert.equal((await askChain("Q", chain, { fetchFn, localAsk })).answer, "L");
+  const { fetchFn, calls } = routedFetch({ "generativelanguage.googleapis.com": 429 });
+  assert.equal((await askChain("Q", chain, { fetchFn })).answer, "T"); // "T" from text.pollinations.ai
+  assert.equal(calls.at(-1), "text.pollinations.ai");
 });
 
 test("askChromeAI asks with the instructions and a JSON schema, then cleans up", async () => {
@@ -345,9 +357,50 @@ test("startDownload reports done, started or refused", async () => {
   assert.equal(await startDownload(undefined), "refused");
 });
 
-test("askChromeAI starts the download itself and says it is downloading", async () => {
-  const LM = { availability: async () => "downloadable", create: () => new Promise(() => {}) };
-  // startDownload's default wait is 1.5s; a never-resolving create means "started".
-  await assert.rejects(askChromeAI("Q", { LM }), (e) => e.message === MODEL_DOWNLOADING);
+test("askChromeAI never starts the large download by itself", async () => {
+  let created = 0;
+  const LM = { availability: async () => "downloadable", create: async () => { created++; } };
+  await assert.rejects(askChromeAI("Q", { LM }), /Download the AI model first/);
+  assert.equal(created, 0);
   await assert.rejects(askChromeAI("Q", { LM: { availability: async () => "downloading" } }), (e) => e.message === MODEL_DOWNLOADING);
+});
+
+test("a 402 from the keyless service explains the limit", () => {
+  assert.throws(() => parseChatResponse(402, {}), /Free no-key limit reached/);
+});
+
+test("keyless Pollinations retries its 402 limit, then succeeds", async () => {
+  let calls = 0;
+  const slept = [];
+  const fetchFn = async () => {
+    calls++;
+    return calls < 3 ? { status: 402, json: async () => ({}) } : { status: 200, json: async () => chatBody('{"answer":"B"}') };
+  };
+  const out = await ask("Q", { provider: "pollinations" }, { fetchFn, sleep: async (ms) => { slept.push(ms); } });
+  assert.equal(out.answer, "B");
+  assert.equal(calls, 3);
+  assert.deepEqual(slept, [10000, 10000]);
+});
+
+test("keyless Pollinations gives up after its retries with the limit message", async () => {
+  let calls = 0;
+  const fetchFn = async () => { calls++; return { status: 402, json: async () => ({}) }; };
+  await assert.rejects(ask("Q", { provider: "pollinations" }, { fetchFn, sleep: async () => {} }), /Free no-key limit reached/);
+  assert.equal(calls, PROVIDERS.pollinations.retryOn402.tries);
+});
+
+test("keyed providers do not retry a 402", async () => {
+  let calls = 0;
+  const fetchFn = async () => { calls++; return { status: 402, json: async () => ({}) }; };
+  await assert.rejects(ask("Q", { provider: "groq", apiKey: "k" }, { fetchFn, sleep: async () => {} }), /limit/);
+  assert.equal(calls, 1);
+});
+
+import { migrateOnUpdate } from "../src/options-state.js";
+
+test("updating from 1.0.x moves a stored Chrome AI choice to the keyless default", () => {
+  assert.deepEqual(migrateOnUpdate({ provider: "chrome" }, "1.0.2"), { provider: "pollinations" });
+  assert.deepEqual(migrateOnUpdate({ provider: "chrome", keys: { gemini: "g" } }, "1.0.0"), { provider: "gemini" });
+  assert.equal(migrateOnUpdate({ provider: "gemini" }, "1.0.2"), null);
+  assert.equal(migrateOnUpdate({ provider: "chrome" }, "1.1.0"), null); // chosen on purpose after 1.1
 });

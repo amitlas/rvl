@@ -33,6 +33,8 @@ export function extractJson(text) {
 export function parseChatResponse(status, body) {
   if (status === 401 || status === 403) throw new Error("Invalid API key (check options)");
   if (status === 429) throw new Error("Free-tier quota reached, try again later");
+  // Pollinations' keyless tier answers 402 once its short-term allowance is used up.
+  if (status === 402) throw new LimitError("Free no-key limit reached: wait a minute, or add a free Gemini key");
   if (status < 200 || status >= 300) {
     throw new Error(body?.error?.message || `API error (HTTP ${status})`);
   }
@@ -45,12 +47,34 @@ export function parseChatResponse(status, body) {
   return { answer, reason: String(parsed.reason ?? "").trim(), options: normalizeOptions(parsed) };
 }
 
-export async function askOpenAICompatible(question, apiKey, { baseUrl, model, allowMultiple = true, fetchFn = fetch }) {
+// endpoint overrides baseUrl/chat/completions for services with another path;
+// with no key, no Authorization header is sent (keyless services).
+// retryOn402: {tries, delayMs} retries a 402 (the keyless tier's short-term
+// limit, roughly one question per 30s) instead of failing straight away.
+export async function askOpenAICompatible(question, apiKey, {
+  baseUrl, endpoint, model, allowMultiple = true, fetchFn = fetch, retryOn402, sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
+}) {
+  const tries = retryOn402?.tries ?? 1;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await askOnce(question, apiKey, { baseUrl, endpoint, model, allowMultiple, fetchFn });
+    } catch (err) {
+      if (!(err instanceof LimitError) || attempt >= tries) throw err;
+      await sleep(retryOn402.delayMs);
+    }
+  }
+}
+
+class LimitError extends Error {}
+
+async function askOnce(question, apiKey, { baseUrl, endpoint, model, allowMultiple, fetchFn }) {
+  const headers = { "Content-Type": "application/json" };
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
   let res;
   try {
-    res = await fetchFn(`${baseUrl}/chat/completions`, {
+    res = await fetchFn(endpoint ?? `${baseUrl}/chat/completions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      headers,
       body: JSON.stringify(buildChatRequest(question, model, { allowMultiple })),
     });
   } catch {

@@ -1,15 +1,20 @@
 import { askChain, chainFromStorage, settingsFromStorage, PROVIDERS } from "./providers.js";
-import { askChromeAI, chromeAIStatus, startDownload } from "./chromeai.js";
+import { askChromeAI } from "./chromeai.js";
+import { migrateOnUpdate } from "./options-state.js";
 import { handleRvl } from "./handler.js";
 
 const MENU_ID = "rvl";
 
-chrome.runtime.onInstalled.addListener(({ reason }) => {
+chrome.runtime.onInstalled.addListener(({ reason, previousVersion }) => {
+  if (reason === "update") {
+    chrome.storage.local.get(null).then((raw) => {
+      const change = migrateOnUpdate(raw, previousVersion);
+      if (change) chrome.storage.local.set(change);
+    });
+  }
   chrome.contextMenus.create({ id: MENU_ID, title: "rvl", contexts: ["selection"] });
   // First install: open settings right away so the API key gets set.
   if (reason === "install") chrome.runtime.openOptionsPage();
-  // Start the free on-device model's one-time download as early as possible.
-  chromeAIStatus().then((s) => { if (s === "downloadable") startDownload(); });
 });
 
 // The toolbar icon opens the settings page.

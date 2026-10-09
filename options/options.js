@@ -42,9 +42,8 @@ async function loadLiveModels(id) {
   if (request === liveRequest && providerSelect.value === id) fillModels(id, live);
 }
 
-// Status line and download button for the on-device model. Chrome may want
-// a click to start the download, so any click or key on this page also
-// starts it, and the status is polled so progress is always visible.
+// Status line and download button for the on-device model, with the status
+// polled so download progress stays visible.
 const localStatusLine = document.getElementById("localStatus");
 const downloadButton = document.getElementById("downloadModel");
 let pollTimer = null;
@@ -76,21 +75,18 @@ async function beginDownload() {
   refreshLocalStatus();
 }
 
+// Only an explicit click on the button downloads the (large) model.
 downloadButton.addEventListener("click", beginDownload);
-// Any interaction with the page counts as the click Chrome may require.
-document.addEventListener("pointerdown", beginDownload, { once: true });
-document.addEventListener("keydown", beginDownload, { once: true });
-// And try once right away, in case no click is needed at all.
-beginDownload();
 
 function fillProvider(id) {
   const p = PROVIDERS[id];
   document.getElementById("keyedSection").hidden = Boolean(p.keyless);
-  document.getElementById("localSection").hidden = !p.keyless;
+  document.getElementById("localSection").hidden = !p.local;
+  document.getElementById("noKeySection").hidden = !(p.keyless && !p.local);
   if (p.keyless) {
     status.textContent = "";
     showSavedKeys();
-    refreshLocalStatus();
+    if (p.local) refreshLocalStatus();
     return;
   }
   apiKeyInput.value = stored.keys[id] ?? "";

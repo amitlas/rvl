@@ -27,10 +27,25 @@ export const PROVIDERS = {
   },
 };
 
+// Free, no key, no sign-up: the default until a key is added, and the
+// fallback after the keyed providers.
+PROVIDERS.pollinations = {
+  label: "Pollinations (free, no key)",
+  models: ["openai"],
+  keyless: true,
+  endpoint: "https://text.pollinations.ai/openai",
+  // About one answer per 30s without a key: keep retrying for ~30s.
+  retryOn402: { tries: 4, delayMs: 10000 },
+};
+
+// On-device model. Only used when chosen explicitly, since it needs a large
+// one-time download.
 PROVIDERS.chrome = {
-  label: "Chrome built-in AI (no key, on this computer)",
+  label: "Chrome built-in AI (on this computer, large download)",
   models: ["gemini-nano"],
   keyless: true,
+  local: true,
+  manualOnly: true,
 };
 
 for (const p of Object.values(PROVIDERS)) p.defaultModel = p.models[0];
@@ -40,8 +55,7 @@ export function defaultProvider(keys = {}) {
   return Object.keys(PROVIDERS).find((id) => !PROVIDERS[id].keyless && String(keys[id] ?? "").trim()) ?? DEFAULT_PROVIDER;
 }
 
-// No key needed: the default until a key is added, and the last fallback after.
-export const DEFAULT_PROVIDER = "chrome";
+export const DEFAULT_PROVIDER = "pollinations";
 
 // Used by the options page to prove the key and model work end to end.
 export const TEST_QUESTION = "What is 2 + 2?\nA. 3\nB. 4\nC. 5";
@@ -60,11 +74,12 @@ export function resolveSettings({ provider, apiKey, model, allowMultiple } = {})
 
 // localAsk runs the on-device model; background.js passes one that works
 // from the service worker (directly or through an offscreen document).
-export function ask(question, settings, { fetchFn = fetch, localAsk = askChromeAI } = {}) {
+export function ask(question, settings, { fetchFn = fetch, localAsk = askChromeAI, sleep } = {}) {
   const { provider, apiKey, model, allowMultiple } = resolveSettings(settings);
   if (provider === "chrome") return localAsk(question, { allowMultiple });
   if (provider === "gemini") return askGemini(question, apiKey, { model, allowMultiple, fetchFn });
-  return askOpenAICompatible(question, apiKey, { baseUrl: PROVIDERS[provider].baseUrl, model, allowMultiple, fetchFn });
+  const { baseUrl, endpoint, retryOn402 } = PROVIDERS[provider];
+  return askOpenAICompatible(question, apiKey, { baseUrl, endpoint, model, allowMultiple, fetchFn, retryOn402, ...(sleep ? { sleep } : {}) });
 }
 
 // Storage layout: {provider, keys: {gemini: "...", groq: "..."}, models: {...}, allowMultiple}
@@ -99,6 +114,7 @@ export function chainFromStorage(stored = {}) {
       allowMultiple: stored.allowMultiple,
     });
     if (!first.apiKey && !PROVIDERS[id].keyless) continue;
+    if (PROVIDERS[id].manualOnly && id !== primary.provider) continue;
     for (const model of [first.model, ...PROVIDERS[id].models.filter((m) => m !== first.model)]) {
       chain.push({ ...first, model });
     }

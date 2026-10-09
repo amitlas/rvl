@@ -14,26 +14,28 @@ git clone https://github.com/amitlas/rvl.git
 
 1. Open `chrome://extensions` and turn on **Developer mode** (top right)
 2. **Load unpacked** and pick the `rvl` folder
-3. Done. It works with no key, using Chrome's built-in on-device AI (see below)
+3. Done. It works right away with no key (see below)
 
 To update later: `git pull` in the folder, then the reload arrow on rvl's card
 in `chrome://extensions`. Do not remove and re-add it: that deletes saved keys.
 
 ## AI providers
 
-- **Chrome built-in AI** (default, no key): Gemini Nano running on your own
-  computer. No key and no quota, but less accurate than the cloud models. It
-  needs a recent Chrome, about 22 GB free disk and 16 GB RAM (or a GPU with
-  more than 4 GB). The first time, open rvl's settings (click its toolbar
-  icon) and press **Download model**.
+- **Pollinations** (default, free, no key, no sign-up, nothing to download):
+  about one question per 30 seconds; rvl waits and retries by itself when
+  asked faster. Less accurate than Gemini.
 - **Free cloud providers** (more accurate, free key, no credit card):
   Google Gemini (aistudio.google.com/apikey), Groq (console.groq.com/keys),
   OpenRouter (openrouter.ai/keys). Add keys in rvl's settings and press
   **Save and test**.
 
+- **Chrome built-in AI** (optional, on-device): only if you choose it in the
+  settings and click **Download model**. It is a large download and needs
+  about 22 GB free disk, so it never downloads by itself.
+
 Fallback is automatic: the selected provider first, then its other models
 (each has its own free quota), then the other providers with a key, and
-Chrome built-in AI last. Keys stay in this browser only (`chrome.storage.local`).
+Pollinations last. Keys stay in this browser only (`chrome.storage.local`).
 
 ## Chrome Web Store
 

@@ -62,13 +62,9 @@ export async function askChromeAI(question, { allowMultiple = true, LM = globalT
     throw new Error(`Chrome built-in AI is not available on this computer, ${NEEDS_KEY}`);
   }
   if (status === "downloading") throw new Error(MODEL_DOWNLOADING);
-  if (status !== "available") {
-    // "downloadable": try to start the download right here; if Chrome wants a
-    // click for it, the options page has the button.
-    const started = await startDownload(LM);
-    if (started === "started") throw new Error(MODEL_DOWNLOADING);
-    if (started === "refused") throw new Error(MODEL_NOT_DOWNLOADED);
-  }
+  // "downloadable": never downloaded automatically (it is large); only the
+  // Download model button in the options page starts it.
+  if (status !== "available") throw new Error(MODEL_NOT_DOWNLOADED);
   const session = await LM.create({
     initialPrompts: [{ role: "system", content: buildInstructions({ allowMultiple }) }],
   });
