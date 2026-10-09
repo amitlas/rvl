@@ -1,7 +1,6 @@
 import { PROVIDERS, fetchModels, modelOptions, askChain, chainFromStorage, TEST_QUESTION, TEST_EXPECTED } from "../src/providers.js";
 import { describeTestResult } from "../src/keytest.js";
 import { normalizeStored, withEdit, withProvider } from "../src/options-state.js";
-import { chromeAIStatus, describeLocalStatus, startDownload } from "../src/chromeai.js";
 
 const providerSelect = document.getElementById("provider");
 const apiKeyInput = document.getElementById("apiKey");
@@ -42,51 +41,13 @@ async function loadLiveModels(id) {
   if (request === liveRequest && providerSelect.value === id) fillModels(id, live);
 }
 
-// Status line and download button for the on-device model, with the status
-// polled so download progress stays visible.
-const localStatusLine = document.getElementById("localStatus");
-const downloadButton = document.getElementById("downloadModel");
-let pollTimer = null;
-
-async function refreshLocalStatus() {
-  const status = await chromeAIStatus();
-  if (!downloading || status !== "downloading") localStatusLine.textContent = describeLocalStatus(status);
-  downloadButton.hidden = status !== "downloadable";
-  clearTimeout(pollTimer);
-  if (status === "downloadable" || status === "downloading") pollTimer = setTimeout(refreshLocalStatus, 2000);
-  return status;
-}
-
-let downloading = false;
-async function beginDownload() {
-  if (downloading || (await chromeAIStatus()) !== "downloadable") return;
-  downloading = true;
-  localStatusLine.textContent = "Starting the download...";
-  const result = await startDownload(globalThis.LanguageModel, {
-    waitMs: 4000,
-    onProgress: (loaded) => { localStatusLine.textContent = `Downloading the model... ${Math.round(loaded * 100)}%`; },
-  });
-  if (result === "refused") {
-    downloading = false;
-    localStatusLine.textContent = "Chrome did not start the download. Check chrome://on-device-internals, or add a free API key.";
-    return;
-  }
-  if (result === "done") downloading = false;
-  refreshLocalStatus();
-}
-
-// Only an explicit click on the button downloads the (large) model.
-downloadButton.addEventListener("click", beginDownload);
-
 function fillProvider(id) {
   const p = PROVIDERS[id];
   document.getElementById("keyedSection").hidden = Boolean(p.keyless);
-  document.getElementById("localSection").hidden = !p.local;
-  document.getElementById("noKeySection").hidden = !(p.keyless && !p.local);
+  document.getElementById("noKeySection").hidden = !p.keyless;
   if (p.keyless) {
     status.textContent = "";
     showSavedKeys();
-    if (p.local) refreshLocalStatus();
     return;
   }
   apiKeyInput.value = stored.keys[id] ?? "";

@@ -32,12 +32,3 @@ export function withProvider(stored, providerId) {
   return { ...stored, provider: PROVIDERS[providerId] ? providerId : stored.provider };
 }
 
-// Up to 1.0.x Chrome built-in AI was the default, so it may be stored as the
-// chosen provider without the user ever picking it. From 1.1.0 it is opt-in:
-// on update from an older version, fall back to the normal default.
-export function migrateOnUpdate(raw = {}, previousVersion = "") {
-  const [major, minor] = String(previousVersion).split(".").map(Number);
-  const before110 = major < 1 || (major === 1 && minor < 1);
-  if (!before110 || raw.provider !== "chrome") return null;
-  return { provider: defaultProvider(raw.keys) };
-}

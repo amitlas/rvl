@@ -1,17 +1,9 @@
 import { askChain, chainFromStorage, settingsFromStorage, PROVIDERS } from "./providers.js";
-import { askChromeAI } from "./chromeai.js";
-import { migrateOnUpdate } from "./options-state.js";
 import { handleRvl } from "./handler.js";
 
 const MENU_ID = "rvl";
 
-chrome.runtime.onInstalled.addListener(({ reason, previousVersion }) => {
-  if (reason === "update") {
-    chrome.storage.local.get(null).then((raw) => {
-      const change = migrateOnUpdate(raw, previousVersion);
-      if (change) chrome.storage.local.set(change);
-    });
-  }
+chrome.runtime.onInstalled.addListener(({ reason }) => {
   chrome.contextMenus.create({ id: MENU_ID, title: "rvl", contexts: ["selection"] });
   // First install: open settings right away so the API key gets set.
   if (reason === "install") chrome.runtime.openOptionsPage();
@@ -34,7 +26,7 @@ function run(tabId, { selectionText = "", frameId }) {
   handleRvl({ selectionText }, {
     readSelection: () => readSelection(tabId, frameId),
     getSettings,
-    ask: (question, settings) => askChain(question, settings.chain, { localAsk }),
+    ask: (question, settings) => askChain(question, settings.chain),
     show: (state) => show(tabId, state),
     openOptions: () => chrome.runtime.openOptionsPage(),
   }).catch((err) => console.error("rvl failed", err));
@@ -59,22 +51,6 @@ async function getSettings() {
   const chain = chainFromStorage(stored);
   const first = chain[0] ?? settingsFromStorage(stored);
   return { ...first, keyless: chain.some((c) => PROVIDERS[c.provider].keyless), chain };
-}
-
-// The Prompt API may not exist in the service worker; an offscreen document
-// is a normal extension page where it does.
-async function localAsk(question, options) {
-  if (globalThis.LanguageModel) return askChromeAI(question, options);
-  if (!(await chrome.offscreen.hasDocument())) {
-    await chrome.offscreen.createDocument({
-      url: "offscreen/offscreen.html",
-      reasons: ["WORKERS"],
-      justification: "Run Chrome's built-in on-device language model",
-    });
-  }
-  const reply = await chrome.runtime.sendMessage({ type: "rvl-local-ask", question, options });
-  if (!reply?.ok) throw new Error(reply?.error || "Chrome built-in AI failed");
-  return reply.result;
 }
 
 // The box always lives in the top frame, so it sits in the real bottom-right

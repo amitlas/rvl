@@ -183,20 +183,22 @@ test("the short download page redirects to the latest release zip", async () => 
   assert.ok(html.includes(`href="${target}"`));
 });
 
-import { MODEL_NOT_DOWNLOADED } from "../src/chromeai.js";
 
-test("model not downloaded: shows a clear message and opens settings", async () => {
-  const f = fakeDeps({
-    getSettings: async () => ({ provider: "chrome", apiKey: "", keyless: true }),
-    ask: async () => { throw new Error(MODEL_NOT_DOWNLOADED); },
-  });
-  await handleRvl({}, f.deps);
-  assert.equal(f.shown[1].text, MODEL_NOT_DOWNLOADED);
-  assert.equal(f.opened(), 1);
-});
 
 test("other errors do not open settings", async () => {
   const f = fakeDeps({ ask: async () => { throw new Error("quota"); } });
   await handleRvl({}, f.deps);
   assert.equal(f.opened(), 0);
+});
+
+test("no code downloads or runs an on-device model", async () => {
+  const { readFile, readdir } = await import("node:fs/promises");
+  const manifest = JSON.parse(await readFile(new URL("../manifest.json", import.meta.url), "utf8"));
+  assert.ok(!manifest.permissions.includes("offscreen"));
+  for (const dir of ["../src/", "../options/"]) {
+    for (const name of await readdir(new URL(dir, import.meta.url))) {
+      const text = await readFile(new URL(dir + name, import.meta.url), "utf8");
+      assert.doesNotMatch(text, /LanguageModel|Download model/, name);
+    }
+  }
 });

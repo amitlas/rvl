@@ -4,7 +4,6 @@
 
 import { askGemini } from "./gemini.js";
 import { askOpenAICompatible } from "./openai.js";
-import { askChromeAI } from "./chromeai.js";
 
 export const PROVIDERS = {
   gemini: {
@@ -38,15 +37,6 @@ PROVIDERS.pollinations = {
   retryOn402: { tries: 4, delayMs: 10000 },
 };
 
-// On-device model. Only used when chosen explicitly, since it needs a large
-// one-time download.
-PROVIDERS.chrome = {
-  label: "Chrome built-in AI (on this computer, large download)",
-  models: ["gemini-nano"],
-  keyless: true,
-  local: true,
-  manualOnly: true,
-};
 
 for (const p of Object.values(PROVIDERS)) p.defaultModel = p.models[0];
 
@@ -72,11 +62,8 @@ export function resolveSettings({ provider, apiKey, model, allowMultiple } = {})
   };
 }
 
-// localAsk runs the on-device model; background.js passes one that works
-// from the service worker (directly or through an offscreen document).
-export function ask(question, settings, { fetchFn = fetch, localAsk = askChromeAI, sleep } = {}) {
+export function ask(question, settings, { fetchFn = fetch, sleep } = {}) {
   const { provider, apiKey, model, allowMultiple } = resolveSettings(settings);
-  if (provider === "chrome") return localAsk(question, { allowMultiple });
   if (provider === "gemini") return askGemini(question, apiKey, { model, allowMultiple, fetchFn });
   const { baseUrl, endpoint, retryOn402 } = PROVIDERS[provider];
   return askOpenAICompatible(question, apiKey, { baseUrl, endpoint, model, allowMultiple, fetchFn, retryOn402, ...(sleep ? { sleep } : {}) });
@@ -114,7 +101,6 @@ export function chainFromStorage(stored = {}) {
       allowMultiple: stored.allowMultiple,
     });
     if (!first.apiKey && !PROVIDERS[id].keyless) continue;
-    if (PROVIDERS[id].manualOnly && id !== primary.provider) continue;
     for (const model of [first.model, ...PROVIDERS[id].models.filter((m) => m !== first.model)]) {
       chain.push({ ...first, model });
     }
@@ -130,13 +116,13 @@ function failsWholeProvider(message) {
 
 // Tries each provider in turn; any failure (quota, bad key, network, outage)
 // moves on to the next. Only when all fail does the error reach the popup.
-export async function askChain(question, chain, { fetchFn = fetch, localAsk } = {}) {
+export async function askChain(question, chain, { fetchFn = fetch } = {}) {
   const failures = [];
   const deadProviders = new Set();
   for (const settings of chain) {
     if (deadProviders.has(settings.provider)) continue;
     try {
-      return await ask(question, settings, { fetchFn, ...(localAsk ? { localAsk } : {}) });
+      return await ask(question, settings, { fetchFn });
     } catch (err) {
       const message = err?.message || "failed";
       if (failsWholeProvider(message)) deadProviders.add(settings.provider);

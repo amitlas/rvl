@@ -29,10 +29,6 @@ in `chrome://extensions`. Do not remove and re-add it: that deletes saved keys.
   OpenRouter (openrouter.ai/keys). Add keys in rvl's settings and press
   **Save and test**.
 
-- **Chrome built-in AI** (optional, on-device): only if you choose it in the
-  settings and click **Download model**. It is a large download and needs
-  about 22 GB free disk, so it never downloads by itself.
-
 Fallback is automatic: the selected provider first, then its other models
 (each has its own free quota), then the other providers with a key, and
 Pollinations last. Keys stay in this browser only (`chrome.storage.local`).
@@ -56,9 +52,8 @@ digit or a few named keys, and rejects Cmd+Option combinations.
 - `src/background.js` - context menu, keyboard command, chrome.* wiring
 - `src/handler.js` - the flow (read selection, ask, choose what to show), no chrome.* calls
 - `src/providers.js` - providers, models, fallback chain
-- `src/gemini.js`, `src/openai.js`, `src/chromeai.js` - one per API
+- `src/gemini.js`, `src/openai.js` - one per API format
 - `src/content.js` - the on-page box (shadow DOM, injected on demand)
-- `offscreen/` - runs the built-in model if the service worker cannot
 - `options/` - settings page
 
 ## Tests

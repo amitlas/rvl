@@ -36,7 +36,6 @@ Show the correct option of a multiple-choice question the user selected on a pag
 - activeTab: reads the selected text and shows the answer box, only on the tab where the user invoked rvl.
 - scripting: injects the small answer box and reads the selection, only after the user invokes rvl.
 - storage: saves the user's settings (provider, API keys, model) locally.
-- offscreen: runs Chrome's built-in on-device AI model (only if the user chooses it) when the service worker cannot.
 - Host permissions (text.pollinations.ai, generativelanguage.googleapis.com, api.groq.com, openrouter.ai): send the selected question to the AI provider in use (Pollinations by default with no key, or a provider the user configured with their own key).
 
 ## Remote code

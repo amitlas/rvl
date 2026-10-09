@@ -17,7 +17,7 @@
   <h1>rvl</h1>
   <p>Select a multiple-choice question, then right-click <b>rvl</b> or press the shortcut.</p>
   <p class="hint">Privacy: only when you use rvl, the selected text goes to the provider you chose
-    (Pollinations by default; Gemini, Groq or OpenRouter only if you add their key; Chrome built-in AI stays on this computer).
+    (Pollinations by default; Gemini, Groq or OpenRouter only if you add their key).
     Settings and keys stay in this browser. Nothing else is collected.
     <a href="https://github.com/amitlas/rvl/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy policy</a></p>
 
@@ -43,14 +43,6 @@
   <div id="noKeySection" hidden>
     <div class="hint">Works right away: no key, no sign-up, nothing to download.
       Less accurate than Gemini; add a free Gemini key for better answers.</div>
-  </div>
-
-  <div id="localSection">
-    <label>Chrome built-in AI</label>
-    <div><span id="localStatus">Checking...</span> <button id="downloadModel" type="button" hidden>Download model</button></div>
-    <div class="hint">Runs on this computer: no key, no quota, but less accurate than the cloud providers.
-      Needs a recent Chrome, about 22 GB free disk and 16 GB RAM (or a GPU with more than 4 GB).
-      Used only when chosen here; the model downloads only when you click Download model.</div>
   </div>
 
   <label><input id="allowMultiple" type="checkbox" style="width:auto"> Allow two correct answers</label>

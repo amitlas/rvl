@@ -270,29 +270,19 @@ test("modelOptions keeps built-in models first and adds only new live ones", () 
   assert.deepEqual(extra, ["alpha", "zeta"]);
 });
 
-import { askChromeAI, chromeAIStatus, describeLocalStatus } from "../src/chromeai.js";
 
-function fakeLM({ status = "available", reply = '{"options":[{"label":"B","correct":true}],"answer":"B","reason":""}' } = {}) {
-  const calls = { create: [], prompt: [], destroyed: 0 };
-  return {
-    calls,
-    availability: async () => status,
-    create: async (opts) => {
-      calls.create.push(opts);
-      return {
-        prompt: async (q, o) => { calls.prompt.push({ q, o }); return reply; },
-        destroy: () => { calls.destroyed++; },
-      };
-    },
-  };
-}
 
-test("with no keys the keyless Pollinations is the default; Chrome AI is never added on its own", () => {
+test("with no keys the keyless Pollinations is the default", () => {
   const chain = chainFromStorage({});
   assert.deepEqual(chain.map((c) => c.provider), ["pollinations"]);
   assert.equal(settingsFromStorage({}).provider, "pollinations");
-  assert.ok(!chainFromStorage({ keys: { gemini: "g" } }).some((c) => c.provider === "chrome"));
-  assert.equal(chainFromStorage({ provider: "chrome" })[0].provider, "chrome");
+});
+
+test("the removed Chrome built-in AI never comes back, even if stored from an old version", () => {
+  assert.equal(PROVIDERS.chrome, undefined);
+  assert.equal(settingsFromStorage({ provider: "chrome" }).provider, "pollinations");
+  assert.equal(normalizeStored({ provider: "chrome", keys: { gemini: "g" } }).provider, "gemini");
+  assert.ok(!chainFromStorage({ provider: "chrome" }).some((c) => c.provider === "chrome"));
 });
 
 test("Pollinations is called without a key or Authorization header", async () => {
@@ -304,14 +294,6 @@ test("Pollinations is called without a key or Authorization header", async () =>
   assert.equal(JSON.parse(seen.init.body).model, "openai");
 });
 
-test("ask routes the chrome provider to the local model, not the network", async () => {
-  let localCalls = 0;
-  const fetchFn = async () => { throw new Error("network must not be used"); };
-  const localAsk = async (q, o) => { localCalls++; assert.equal(o.allowMultiple, false); return { answer: "A", reason: "", options: [] }; };
-  const out = await ask("Q", { provider: "chrome", allowMultiple: false }, { fetchFn, localAsk });
-  assert.equal(out.answer, "A");
-  assert.equal(localCalls, 1);
-});
 
 test("askChain falls back to keyless Pollinations when every keyed provider fails", async () => {
   const chain = chainFromStorage({ provider: "gemini", keys: { gemini: "g" } });
@@ -320,50 +302,11 @@ test("askChain falls back to keyless Pollinations when every keyed provider fail
   assert.equal(calls.at(-1), "text.pollinations.ai");
 });
 
-test("askChromeAI asks with the instructions and a JSON schema, then cleans up", async () => {
-  const LM = fakeLM();
-  const out = await askChromeAI("Q", { allowMultiple: false, LM });
-  assert.deepEqual(out, { answer: "B", reason: "", options: [{ label: "B", correct: true }] });
-  assert.match(LM.calls.create[0].initialPrompts[0].content, /single correct option/);
-  assert.equal(LM.calls.prompt[0].q, "Q");
-  assert.ok(LM.calls.prompt[0].o.responseConstraint.required.includes("options"));
-  assert.equal(LM.calls.destroyed, 1);
-});
 
-test("askChromeAI explains unavailable and not-downloaded states", async () => {
-  await assert.rejects(askChromeAI("Q", { LM: undefined }), /not available on this computer.*API key/);
-  await assert.rejects(askChromeAI("Q", { LM: fakeLM({ status: "unavailable" }) }), /not available/);
-  const refusing = { ...fakeLM({ status: "downloadable" }), create: async () => { throw new Error("NotAllowedError"); } };
-  await assert.rejects(askChromeAI("Q", { LM: refusing }), /Download the AI model first/);
-  await assert.rejects(askChromeAI("Q", { LM: fakeLM({ reply: "nope" }) }), /unreadable/);
-});
 
-test("chromeAIStatus and describeLocalStatus", async () => {
-  assert.equal(await chromeAIStatus(undefined), "unsupported");
-  assert.equal(await chromeAIStatus({ availability: async () => { throw new Error(); } }), "unavailable");
-  assert.equal(await chromeAIStatus(fakeLM({ status: "downloading" })), "downloading");
-  assert.equal(describeLocalStatus("available"), "Ready.");
-  assert.match(describeLocalStatus("downloadable"), /not downloaded/);
-  assert.match(describeLocalStatus("unavailable"), /API key/);
-});
 
-import { startDownload, MODEL_DOWNLOADING } from "../src/chromeai.js";
 
-test("startDownload reports done, started or refused", async () => {
-  const lm = (create) => ({ create });
-  assert.equal(await startDownload(lm(async () => ({ destroy() {} })), { waitMs: 50 }), "done");
-  assert.equal(await startDownload(lm(() => new Promise(() => {})), { waitMs: 20 }), "started");
-  assert.equal(await startDownload(lm(async () => { throw new Error("NotAllowedError"); }), { waitMs: 50 }), "refused");
-  assert.equal(await startDownload(undefined), "refused");
-});
 
-test("askChromeAI never starts the large download by itself", async () => {
-  let created = 0;
-  const LM = { availability: async () => "downloadable", create: async () => { created++; } };
-  await assert.rejects(askChromeAI("Q", { LM }), /Download the AI model first/);
-  assert.equal(created, 0);
-  await assert.rejects(askChromeAI("Q", { LM: { availability: async () => "downloading" } }), (e) => e.message === MODEL_DOWNLOADING);
-});
 
 test("a 402 from the keyless service explains the limit", () => {
   assert.throws(() => parseChatResponse(402, {}), /Free no-key limit reached/);
@@ -396,11 +339,4 @@ test("keyed providers do not retry a 402", async () => {
   assert.equal(calls, 1);
 });
 
-import { migrateOnUpdate } from "../src/options-state.js";
 
-test("updating from 1.0.x moves a stored Chrome AI choice to the keyless default", () => {
-  assert.deepEqual(migrateOnUpdate({ provider: "chrome" }, "1.0.2"), { provider: "pollinations" });
-  assert.deepEqual(migrateOnUpdate({ provider: "chrome", keys: { gemini: "g" } }, "1.0.0"), { provider: "gemini" });
-  assert.equal(migrateOnUpdate({ provider: "gemini" }, "1.0.2"), null);
-  assert.equal(migrateOnUpdate({ provider: "chrome" }, "1.1.0"), null); // chosen on purpose after 1.1
-});

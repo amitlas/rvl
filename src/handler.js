@@ -2,7 +2,6 @@
 // plain fakes. background.js supplies the real deps.
 
 import { cleanQuestion } from "./gemini.js";
-import { MODEL_NOT_DOWNLOADED } from "./chromeai.js";
 
 // deps:
 //   readSelection() -> Promise<string>   selected text from the page ("" if none)
@@ -26,7 +25,7 @@ export async function handleRvl({ selectionText = "" } = {}, deps) {
   }
 
   const settings = await deps.getSettings();
-  // A keyless provider (Chrome built-in AI) means there is always something to try.
+  // A keyless provider (Pollinations) means there is always something to try.
   if (!settings.apiKey && !settings.keyless) {
     await deps.show({ kind: "error", text: "Set your API key in the rvl options" });
     deps.openOptions();
@@ -39,10 +38,7 @@ export async function handleRvl({ selectionText = "" } = {}, deps) {
     const shown = chooseAnswer(result, { allowMultiple: settings.allowMultiple !== false });
     await deps.show({ kind: "result", answer: shown, reason: result.reason });
   } catch (err) {
-    const text = err?.message || "Something went wrong";
-    await deps.show({ kind: "error", text });
-    // The download needs a click on the settings page, so take the user there.
-    if (text.includes(MODEL_NOT_DOWNLOADED)) deps.openOptions();
+    await deps.show({ kind: "error", text: err?.message || "Something went wrong" });
   }
 }
 

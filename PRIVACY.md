@@ -14,9 +14,6 @@ AI provider to get the answer:
 - **Pollinations** (the default, no key): the selected text is sent over
   HTTPS to text.pollinations.ai (https://pollinations.ai), with no account
   or identifier from rvl.
-- **Chrome built-in AI** (only if you choose it): the text is processed by
-  Google's on-device model inside Chrome on your own computer. It is not sent
-  over the network by rvl.
 - **Google Gemini API**, **Groq** or **OpenRouter**: only if you added your
   own API key for that provider in rvl's settings. The selected text is sent
   over HTTPS directly from your browser to that provider, under that
