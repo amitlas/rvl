@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "rvl",
   "description": "Select a multiple-choice question and see the correct option's letter in a small box. Free, works with no key.",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "permissions": [
     "contextMenus",
     "storage",

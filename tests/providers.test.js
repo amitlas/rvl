@@ -62,7 +62,7 @@ test("ask routes gemini to the Gemini API and others to their base URL", async (
   await ask("Q", { provider: "gemini", apiKey: "k" }, { fetchFn });
   await ask("Q", { provider: "groq", apiKey: "k" }, { fetchFn });
   await ask("Q", { provider: "openrouter", apiKey: "k" }, { fetchFn });
-  assert.match(urls[0], /generativelanguage\.googleapis\.com.*gemini-flash-latest:generateContent/);
+  assert.match(urls[0], /generativelanguage\.googleapis\.com.*gemini-flash-lite-latest:generateContent/);
   assert.equal(urls[1], `${PROVIDERS.groq.baseUrl}/chat/completions`);
   assert.equal(urls[2], `${PROVIDERS.openrouter.baseUrl}/chat/completions`);
 });
@@ -340,3 +340,12 @@ test("keyed providers do not retry a 402", async () => {
 });
 
 
+
+test("each provider tries its cheapest model first", () => {
+  assert.equal(PROVIDERS.gemini.defaultModel, "gemini-flash-lite-latest");
+  assert.ok(PROVIDERS.gemini.models.slice(0, 3).every((m) => m.includes("lite")));
+  assert.equal(PROVIDERS.groq.defaultModel, "llama-3.1-8b-instant");
+  assert.equal(PROVIDERS.openrouter.defaultModel, "google/gemma-4-26b-a4b-it:free");
+  const chain = chainFromStorage({ provider: "gemini", keys: { gemini: "g" } });
+  assert.equal(chain[0].model, "gemini-flash-lite-latest");
+});

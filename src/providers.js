@@ -1,6 +1,6 @@
 // Free AI providers rvl can use. Each has its own key. Every model has its
-// own free quota, so each provider lists several in fallback order; the
-// options page adds whatever the provider currently offers on top.
+// own free quota, so each provider lists several in fallback order, cheapest
+// first; the options page adds whatever the provider currently offers on top.
 
 import { askGemini } from "./gemini.js";
 import { askOpenAICompatible } from "./openai.js";
@@ -8,19 +8,21 @@ import { askOpenAICompatible } from "./openai.js";
 export const PROVIDERS = {
   gemini: {
     label: "Google Gemini",
-    // The -latest aliases follow Google's renames, so they outlive versions.
-    models: ["gemini-flash-latest", "gemini-3.5-flash", "gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-flash-lite"],
+    // Cheapest (lite) first. The -latest aliases follow Google's renames.
+    models: ["gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-3.5-flash", "gemini-2.5-flash"],
     keyUrl: "https://aistudio.google.com/apikey",
   },
   groq: {
     label: "Groq",
-    models: ["llama-3.3-70b-versatile", "openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.1-8b-instant"],
+    // Smallest (cheapest) first.
+    models: ["llama-3.1-8b-instant", "openai/gpt-oss-20b", "llama-3.3-70b-versatile", "openai/gpt-oss-120b"],
     keyUrl: "https://console.groq.com/keys",
     baseUrl: "https://api.groq.com/openai/v1",
   },
   openrouter: {
     label: "OpenRouter (free models)",
-    models: ["google/gemma-4-31b-it:free", "nvidia/nemotron-3-super-120b-a12b:free", "google/gemma-4-26b-a4b-it:free"],
+    // Smallest (cheapest) first.
+    models: ["google/gemma-4-26b-a4b-it:free", "google/gemma-4-31b-it:free", "nvidia/nemotron-3-super-120b-a12b:free"],
     keyUrl: "https://openrouter.ai/keys",
     baseUrl: "https://openrouter.ai/api/v1",
   },
