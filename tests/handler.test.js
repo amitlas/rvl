@@ -40,6 +40,36 @@ test("falls back to selectionText when the page selection is empty or unreadable
   assert.equal(blocked.asked[0].q, "flat Q");
 });
 
+test("no selection falls back to the whole page text", async () => {
+  const f = fakeDeps({ readSelection: async () => "  ", readPage: async () => "Page Q?\nA. x\nB. y" });
+  await handleRvl({}, f.deps);
+  assert.equal(f.asked[0].q, "Page Q?\nA. x\nB. y");
+});
+
+test("a selection means the page text is never read", async () => {
+  let pageReads = 0;
+  const f = fakeDeps({ readPage: async () => { pageReads++; return "whole page"; } });
+  await handleRvl({}, f.deps);
+  assert.equal(pageReads, 0);
+  assert.equal(f.asked[0].q, "Q?\nA. x\nB. y");
+
+  const ctx = fakeDeps({ readSelection: async () => "", readPage: async () => { pageReads++; return "whole page"; } });
+  await handleRvl({ selectionText: "flat Q" }, ctx.deps);
+  assert.equal(pageReads, 0);
+  assert.equal(ctx.asked[0].q, "flat Q");
+});
+
+test("empty or unreadable page with no selection still shows the select error", async () => {
+  const empty = fakeDeps({ readSelection: async () => "", readPage: async () => "  " });
+  await handleRvl({}, empty.deps);
+  assert.deepEqual(empty.shown, [{ kind: "error", text: "Select a question first" }]);
+  assert.equal(empty.asked.length, 0);
+
+  const blocked = fakeDeps({ readSelection: async () => "", readPage: async () => { throw new Error("no access"); } });
+  await handleRvl({}, blocked.deps);
+  assert.deepEqual(blocked.shown, [{ kind: "error", text: "Select a question first" }]);
+});
+
 test("no selection at all shows an error and never calls the AI", async () => {
   const f = fakeDeps({ readSelection: async () => "   " });
   await handleRvl({}, f.deps);

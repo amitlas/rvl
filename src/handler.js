@@ -5,6 +5,7 @@ import { cleanQuestion } from "./gemini.js";
 
 // deps:
 //   readSelection() -> Promise<string>   selected text from the page ("" if none)
+//   readPage()      -> Promise<string>   whole page text, used only when nothing is selected
 //   getSettings()   -> Promise<{provider, apiKey, model}>
 //   ask(question, settings) -> Promise<{answer, reason}>
 //   show(state)     -> Promise<void>     state is {kind: "loading"|"result"|"error", ...}
@@ -18,7 +19,16 @@ export async function handleRvl({ selectionText = "" } = {}, deps) {
   }
   // The page selection keeps line breaks between options; the context-menu
   // selectionText flattens them, so it is only the fallback.
-  const question = cleanQuestion(selected || selectionText);
+  let text = selected || selectionText;
+  // Nothing selected: assume the page shows a single question and send all of it.
+  if (!text.trim() && deps.readPage) {
+    try {
+      text = await deps.readPage();
+    } catch {
+      text = "";
+    }
+  }
+  const question = cleanQuestion(text);
   if (!question) {
     await deps.show({ kind: "error", text: "Select a question first" });
     return;

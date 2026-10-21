@@ -1,6 +1,7 @@
 # rvl
 
-Chrome extension (Manifest V3). Select a multiple-choice question on any page,
+Chrome extension (Manifest V3). Select a multiple-choice question on any page
+(or select nothing on a page with a single question: the whole page is sent),
 then right-click **rvl** or press **Ctrl+Z** (the Control key, on Mac and
 Windows). A small box in the bottom-right corner shows the correct option's
 letter (or two letters, if two options are correct and that setting is on).

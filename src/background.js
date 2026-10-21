@@ -25,6 +25,7 @@ chrome.commands.onCommand.addListener((command, tab) => {
 function run(tabId, { selectionText = "", frameId }) {
   handleRvl({ selectionText }, {
     readSelection: () => readSelection(tabId, frameId),
+    readPage: () => readPage(tabId),
     getSettings,
     ask: (question, settings) => askChain(question, settings.chain),
     show: (state) => show(tabId, state),
@@ -42,6 +43,16 @@ async function readSelection(tabId, frameId) {
     func: () => window.getSelection()?.toString() ?? "",
   });
   return results.map((r) => r.result).find((text) => text && text.trim()) ?? "";
+}
+
+// No selection: take the visible text of every frame and keep the longest, so
+// a quiz inside an iframe wins over a short wrapper page.
+async function readPage(tabId) {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    func: () => document.body?.innerText ?? "",
+  });
+  return results.map((r) => r.result ?? "").reduce((a, b) => (b.trim().length > a.trim().length ? b : a), "");
 }
 
 // The first provider with a key is the one the handler checks; the whole
