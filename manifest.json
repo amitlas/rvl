@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "rvl",
   "description": "Select a multiple-choice question and see the correct option's letter in a small box. Free, works with no key.",
-  "version": "1.2.1",
+  "version": "1.4.0",
   "permissions": [
     "contextMenus",
     "storage",
@@ -26,6 +26,13 @@
         "mac": "MacCtrl+Z"
       },
       "description": "Reveal the answer to the selected question"
+    },
+    "rvl-hide": {
+      "suggested_key": {
+        "default": "Alt+X",
+        "mac": "MacCtrl+X"
+      },
+      "description": "Hide the box (stops a pending answer)"
     }
   },
   "action": {

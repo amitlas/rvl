@@ -10,6 +10,7 @@ import { cleanQuestion } from "./gemini.js";
 //   ask(question, settings) -> Promise<{answer, reason}>
 //   show(state)     -> Promise<void>     state is {kind: "loading"|"result"|"error", ...}
 //   openOptions()   -> void
+//   cancelled()     -> boolean           optional; true once the user hid the box, so a late answer is dropped
 export async function handleRvl({ selectionText = "" } = {}, deps) {
   let selected = "";
   try {
@@ -45,9 +46,11 @@ export async function handleRvl({ selectionText = "" } = {}, deps) {
   await deps.show({ kind: "loading" });
   try {
     const result = await deps.ask(question, settings);
-    const shown = chooseAnswer(result, { allowMultiple: settings.allowMultiple !== false });
+    if (deps.cancelled?.()) return;
+    const shown = chooseAnswer(result, { allowMultiple: settings.allowMultiple !== false, hebrew: /[\u0590-\u05FF]/.test(question) });
     await deps.show({ kind: "result", answer: shown, reason: result.reason });
   } catch (err) {
+    if (deps.cancelled?.()) return;
     await deps.show({ kind: "error", text: err?.message || "Something went wrong" });
   }
 }
@@ -63,9 +66,22 @@ export function bareLabel(answer) {
 // The per-option verdicts decide what is shown: exactly the options judged
 // correct, when that is 1 (or up to 2 if allowed). Otherwise, or when the
 // model sent no verdicts, fall back to its "answer" field, capped the same way.
-export function chooseAnswer({ answer, options = [] }, { allowMultiple = true } = {}) {
+// Only letters are ever shown: an option without a short label (the model
+// quoted its text) becomes its position letter, A/B/C or א/ב/ג.
+export function chooseAnswer({ answer, options = [] }, { allowMultiple = true, hebrew = false } = {}) {
   const limit = allowMultiple ? 2 : 1;
-  const correct = options.filter((o) => o.correct).map((o) => bareLabel(o.label));
+  const letters = hebrew ? "אבגדהוזחטי" : "ABCDEFGHIJ";
+  // "?" is the model saying "not a question": shown as "-" like every failure.
+  const short = (label) => label.length <= 3 && label !== "?";
+  const labelAt = (i) => {
+    const label = bareLabel(options[i].label);
+    return short(label) ? label : letters[i] ?? "-";
+  };
+  const correct = options.map((o, i) => (o.correct ? labelAt(i) : null)).filter(Boolean);
   if (correct.length >= 1 && correct.length <= limit) return correct.join(", ");
-  return bareLabel(answer).split(", ").slice(0, limit).join(", ");
+  return bareLabel(answer).split(", ").slice(0, limit).map((part) => {
+    if (short(part)) return part;
+    const i = options.findIndex((o) => o.label.startsWith(part) || part.startsWith(o.label));
+    return i >= 0 ? labelAt(i) : "-";
+  }).join(", ");
 }

@@ -1,5 +1,6 @@
 import { askChain, chainFromStorage, settingsFromStorage, PROVIDERS } from "./providers.js";
 import { handleRvl } from "./handler.js";
+import { visibleText } from "./visible.js";
 
 const MENU_ID = "rvl";
 
@@ -18,12 +19,20 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 });
 
 chrome.commands.onCommand.addListener((command, tab) => {
-  if (command !== "rvl" || !tab?.id) return;
-  run(tab.id, {});
+  if (!tab?.id) return;
+  if (command === "rvl") run(tab.id, {});
+  if (command === "rvl-hide") hide(tab.id);
 });
 
+// Latest run per tab. Hiding or starting a new run bumps it, so an answer
+// still on its way for an older run is dropped instead of popping back up.
+const runIds = new Map();
+
 function run(tabId, { selectionText = "", frameId }) {
+  const id = (runIds.get(tabId) ?? 0) + 1;
+  runIds.set(tabId, id);
   handleRvl({ selectionText }, {
+    cancelled: () => runIds.get(tabId) !== id,
     readSelection: () => readSelection(tabId, frameId),
     readPage: () => readPage(tabId),
     getSettings,
@@ -45,14 +54,25 @@ async function readSelection(tabId, frameId) {
   return results.map((r) => r.result).find((text) => text && text.trim()) ?? "";
 }
 
-// No selection: take the visible text of every frame and keep the longest, so
-// a quiz inside an iframe wins over a short wrapper page.
+// No selection: take the text inside the viewport of every frame and keep the
+// longest, so only the question on screen is sent (not the ones further down),
+// and a quiz inside an iframe wins over a short wrapper page.
 async function readPage(tabId) {
   const results = await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
-    func: () => document.body?.innerText ?? "",
+    func: visibleText,
   });
   return results.map((r) => r.result ?? "").reduce((a, b) => (b.trim().length > a.trim().length ? b : a), "");
+}
+
+// shortcut: the request itself is not aborted, its answer is just ignored.
+async function hide(tabId) {
+  runIds.set(tabId, (runIds.get(tabId) ?? 0) + 1);
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, func: () => window.__rvlHide?.() });
+  } catch {
+    // Page does not allow injection, so there is no box to hide.
+  }
 }
 
 // The first provider with a key is the one the handler checks; the whole

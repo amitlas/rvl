@@ -17,6 +17,7 @@
     if (e.key === "Escape") remove();
   }
   document.addEventListener("keydown", onKey, true);
+  window.__rvlHide = remove;
 
   window.__rvlShow = (state) => {
     remove();
@@ -53,8 +54,10 @@
       box.dir = "auto";
       box.textContent = state.answer;
     } else {
+      // Every failure is a bare "-"; the reason is only in the hover title.
       box.classList.add("error");
-      box.textContent = state.text || "Error";
+      box.textContent = "-";
+      box.title = state.text || "Error";
     }
 
     root.appendChild(box);

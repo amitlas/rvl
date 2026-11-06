@@ -232,3 +232,95 @@ test("no code downloads or runs an on-device model", async () => {
     }
   }
 });
+
+test("hiding while loading drops the late answer, and a new run still works", async () => {
+  let hidden = false;
+  const f = fakeDeps({
+    cancelled: () => hidden,
+    ask: async () => { hidden = true; return { answer: "B", reason: "r" }; },
+  });
+  await handleRvl({}, f.deps);
+  assert.deepEqual(f.shown, [{ kind: "loading" }]);
+
+  const again = fakeDeps({ cancelled: () => false });
+  await handleRvl({}, again.deps);
+  assert.deepEqual(again.shown, [{ kind: "loading" }, { kind: "result", answer: "B", reason: "r" }]);
+});
+
+test("hiding while loading also drops a late error", async () => {
+  let hidden = false;
+  const f = fakeDeps({
+    cancelled: () => hidden,
+    ask: async () => { hidden = true; throw new Error("boom"); },
+  });
+  await handleRvl({}, f.deps);
+  assert.deepEqual(f.shown, [{ kind: "loading" }]);
+});
+
+import { visibleText } from "../src/visible.js";
+
+// Fake DOM: each node is {text, top, tag?, hidden?}; one line is 20px tall.
+function fakePage(nodes, height = 100) {
+  const textNodes = nodes.map((n) => ({
+    nodeValue: n.text,
+    parentElement: { tagName: n.tag ?? "DIV", hidden: !!n.hidden },
+    top: n.top,
+  }));
+  const doc = {
+    body: {},
+    createTreeWalker: () => { let i = 0; return { nextNode: () => textNodes[i++] ?? null }; },
+    createRange: () => {
+      let node;
+      return {
+        selectNodeContents: (n) => { node = n; },
+        getClientRects: () => [{ top: node.top, bottom: node.top + 20, left: 0, right: 50, width: 50, height: 20 }],
+      };
+    },
+  };
+  const win = { innerHeight: height, innerWidth: 800, getComputedStyle: (el) => ({ visibility: el.hidden ? "hidden" : "visible" }) };
+  return visibleText(doc, win);
+}
+
+test("visibleText sends only the question inside the viewport", () => {
+  const text = fakePage([
+    { text: "Old Q above?", top: -60 },
+    { text: "Q1?", top: 10 },
+    { text: "A.", top: 40 }, { text: "x", top: 40 },
+    { text: "B. y", top: 70 },
+    { text: "Q2 below?", top: 300 },
+  ]);
+  assert.equal(text, "Q1?\nA. x\nB. y");
+});
+
+test("visibleText skips scripts, styles and visibility:hidden text", () => {
+  const text = fakePage([
+    { text: "var a = 1", top: 10, tag: "SCRIPT" },
+    { text: ".x{}", top: 10, tag: "STYLE" },
+    { text: "secret", top: 10, hidden: true },
+    { text: "Q?", top: 10 },
+  ]);
+  assert.equal(text, "Q?");
+});
+
+test("chooseAnswer never shows option text, only a letter", () => {
+  const options = [
+    { label: "Mitochondria", correct: false },
+    { label: "The nucleus holds DNA", correct: true },
+  ];
+  assert.equal(chooseAnswer({ answer: "The nucleus holds DNA", options }), "B");
+  assert.equal(chooseAnswer({ answer: "x", options }, { hebrew: true }), "ב");
+  // No verdicts: the quoted answer text is matched back to its option.
+  const none = options.map((o) => ({ ...o, correct: false }));
+  assert.equal(chooseAnswer({ answer: "The nucleus", options: none }), "B");
+  assert.equal(chooseAnswer({ answer: "Some long answer text" }), "-");
+  assert.equal(chooseAnswer({ answer: "?" }), "-");
+});
+
+test("handleRvl uses Hebrew position letters for a Hebrew question", async () => {
+  const f = fakeDeps({
+    readSelection: async () => "מה נכון?\nתא\nגרעין",
+    ask: async () => ({ answer: "גרעין", reason: "r", options: [{ label: "תא", correct: false }, { label: "גרעין מכיל DNA", correct: true }] }),
+  });
+  await handleRvl({}, f.deps);
+  assert.equal(f.shown[1].answer, "ב");
+});

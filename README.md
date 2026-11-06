@@ -1,11 +1,13 @@
 # rvl
 
 Chrome extension (Manifest V3). Select a multiple-choice question on any page
-(or select nothing on a page with a single question: the whole page is sent),
+(or select nothing: only the text inside the window is sent),
 then right-click **rvl** or press **Ctrl+Z** (the Control key, on Mac and
 Windows). A small box in the bottom-right corner shows the correct option's
 letter (or two letters, if two options are correct and that setting is on).
-Click the box or press Esc to close it; it hides by itself after 20s.
+It only ever shows a letter; any failure shows "-" (hover it for the reason).
+Click the box, press Esc, or press **Ctrl+X** (Alt+X on Windows) to close it;
+Ctrl+X also drops an answer still loading. It hides by itself after 20s.
 
 ## Install
 
@@ -54,6 +56,7 @@ digit or a few named keys, and rejects Cmd+Option combinations.
 - `src/handler.js` - the flow (read selection, ask, choose what to show), no chrome.* calls
 - `src/providers.js` - providers, models, fallback chain
 - `src/gemini.js`, `src/openai.js` - one per API format
+- `src/visible.js` - text inside the viewport, sent when nothing is selected
 - `src/content.js` - the on-page box (shadow DOM, injected on demand)
 - `options/` - settings page
 
