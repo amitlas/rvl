@@ -1,7 +1,17 @@
-// Free AI providers rvl can use. Each has its own key. Every model has its
-// own free quota, so each provider lists several in fallback order, cheapest
-// first; the options page adds whatever the provider currently offers on top.
+// AI providers rvl can use, free and paid. Each has its own key. Every model
+// has its own quota, so each provider lists several in fallback order; the
+// options page adds whatever the provider currently offers on top.
+//
+// quotaStatuses: the HTTP statuses with which that provider says "no quota or
+// no credit left" (checked against each provider's own error reference,
+// 2026-11-13). Only these freeze a model for FREEZE_MS.
+//   Gemini      429 RESOURCE_EXHAUSTED, 402 prepaid credits depleted
+//   Groq        429
+//   OpenRouter  402 insufficient credits, 429 rate limited
+//   OpenAI      429 for both rate limits and exhausted credits or spend limits
+//   Claude      402 billing_error, 429 rate limit or monthly spend cap
 
+import { askAnthropic } from "./anthropic.js";
 import { askGemini } from "./gemini.js";
 import { askOpenAICompatible } from "./openai.js";
 
@@ -11,6 +21,7 @@ export const PROVIDERS = {
     // Cheapest (lite) first. The -latest aliases follow Google's renames.
     models: ["gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-2.5-flash-lite", "gemini-flash-latest", "gemini-3.5-flash", "gemini-2.5-flash"],
     keyUrl: "https://aistudio.google.com/apikey",
+    quotaStatuses: [429, 402],
   },
   groq: {
     label: "Groq",
@@ -18,6 +29,7 @@ export const PROVIDERS = {
     models: ["llama-3.1-8b-instant", "openai/gpt-oss-20b", "llama-3.3-70b-versatile", "openai/gpt-oss-120b"],
     keyUrl: "https://console.groq.com/keys",
     baseUrl: "https://api.groq.com/openai/v1",
+    quotaStatuses: [429],
   },
   openrouter: {
     label: "OpenRouter (free models)",
@@ -25,6 +37,26 @@ export const PROVIDERS = {
     models: ["google/gemma-4-26b-a4b-it:free", "google/gemma-4-31b-it:free", "nvidia/nemotron-3-super-120b-a12b:free"],
     keyUrl: "https://openrouter.ai/keys",
     baseUrl: "https://openrouter.ai/api/v1",
+    quotaStatuses: [402, 429],
+  },
+  openai: {
+    label: "OpenAI / ChatGPT (paid)",
+    // Cheapest first.
+    models: ["gpt-6-luna", "gpt-6.1-terra", "gpt-6.1-sol"],
+    keyUrl: "https://platform.openai.com/api-keys",
+    baseUrl: "https://api.openai.com/v1",
+    noTemperature: true,
+    // Reasoning models: slower than the small free ones, worth the wait.
+    timeoutMs: 15000,
+    quotaStatuses: [429],
+  },
+  anthropic: {
+    label: "Anthropic Claude (paid)",
+    // Most capable first; pick Haiku in the options for the cheapest.
+    models: ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"],
+    keyUrl: "https://platform.claude.com/settings/keys",
+    timeoutMs: 15000,
+    quotaStatuses: [402, 429],
   },
 };
 
@@ -35,6 +67,8 @@ PROVIDERS.pollinations = {
   models: ["openai"],
   keyless: true,
   endpoint: "https://text.pollinations.ai/openai",
+  // A small reasoning model: a good answer takes 6-14s.
+  timeoutMs: 20000,
   // About one answer per 30s without a key: keep retrying for ~30s.
   retryOn402: { tries: 4, delayMs: 10000 },
 };
@@ -66,9 +100,10 @@ export function resolveSettings({ provider, apiKey, model, allowMultiple } = {})
 
 export function ask(question, settings, { fetchFn = fetch, sleep } = {}) {
   const { provider, apiKey, model, allowMultiple } = resolveSettings(settings);
-  if (provider === "gemini") return askGemini(question, apiKey, { model, allowMultiple, fetchFn });
-  const { baseUrl, endpoint, retryOn402 } = PROVIDERS[provider];
-  return askOpenAICompatible(question, apiKey, { baseUrl, endpoint, model, allowMultiple, fetchFn, retryOn402, ...(sleep ? { sleep } : {}) });
+  const { baseUrl, endpoint, retryOn402, timeoutMs, noTemperature } = PROVIDERS[provider];
+  if (provider === "gemini") return askGemini(question, apiKey, { model, allowMultiple, fetchFn, timeoutMs });
+  if (provider === "anthropic") return askAnthropic(question, apiKey, { model, allowMultiple, fetchFn, timeoutMs });
+  return askOpenAICompatible(question, apiKey, { baseUrl, endpoint, model, allowMultiple, fetchFn, retryOn402, timeoutMs, noTemperature, ...(sleep ? { sleep } : {}) });
 }
 
 // Storage layout: {provider, keys: {gemini: "...", groq: "..."}, models: {...}, allowMultiple}
@@ -116,17 +151,27 @@ function failsWholeProvider(message) {
   return /API key|network/i.test(message);
 }
 
+// A keyed model that reports "out of quota or credit" is left alone for this long:
+// later questions skip it without asking, so they do not pay for the refusal.
+export const FREEZE_MS = 60 * 60 * 1000;
+export const freezeKey = ({ provider, model }) => `${provider}/${model}`;
+
 // Tries each provider in turn; any failure (quota, bad key, network, outage)
-// moves on to the next. Only when all fail does the error reach the popup.
-export async function askChain(question, chain, { fetchFn = fetch } = {}) {
+// moves on to the next. Only when all fail is an error thrown.
+// frozen: {freezeKey: untilMs} from earlier runs; onFreeze(key, untilMs) stores
+// a new one; log(line) gets every failure (nothing of this reaches the page).
+export async function askChain(question, chain, { fetchFn = fetch, frozen = {}, now = Date.now(), onFreeze, log } = {}) {
   const failures = [];
   const deadProviders = new Set();
   for (const settings of chain) {
     if (deadProviders.has(settings.provider)) continue;
+    if (frozen[freezeKey(settings)] > now) continue;
     try {
       return await ask(question, settings, { fetchFn });
     } catch (err) {
       const message = err?.message || "failed";
+      log?.(`${freezeKey(settings)}: ${message}`);
+      if (PROVIDERS[settings.provider].quotaStatuses?.includes(err?.status)) onFreeze?.(freezeKey(settings), now + FREEZE_MS);
       if (failsWholeProvider(message)) deadProviders.add(settings.provider);
       // One line per provider: its last error is the one worth showing.
       const i = failures.findIndex((f) => f.startsWith(`${settings.provider}: `));
@@ -143,7 +188,7 @@ export async function askChain(question, chain, { fetchFn = fetch } = {}) {
 // on any failure; the built-in list is always shown anyway.
 export async function fetchModels(providerId, apiKey, { fetchFn = fetch } = {}) {
   const p = PROVIDERS[providerId];
-  if (!p || !apiKey) return [];
+  if (!p || !apiKey || !p.baseUrl && providerId !== "gemini") return [];
   try {
     if (providerId === "gemini") {
       const res = await fetchFn("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", {
@@ -160,7 +205,7 @@ export async function fetchModels(providerId, apiKey, { fetchFn = fetch } = {}) 
     if (res.status !== 200) return [];
     const ids = ((await res.json()).data ?? []).map((m) => String(m.id));
     if (providerId === "openrouter") return ids.filter((id) => id.endsWith(":free"));
-    return ids.filter((id) => !/whisper|tts|guard|playai|distil/i.test(id));
+    return ids.filter((id) => !/whisper|tts|guard|playai|distil|embedding|image|dall-e|moderation|realtime|audio|sora/i.test(id));
   } catch {
     return [];
   }

@@ -24,6 +24,11 @@ chrome.commands.onCommand.addListener((command, tab) => {
   if (command === "rvl-hide") hide(tab.id);
 });
 
+// A new or changed key gets tried right away instead of waiting out a freeze.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.keys) chrome.storage.session.remove("frozen");
+});
+
 // Latest run per tab. Hiding or starting a new run bumps it, so an answer
 // still on its way for an older run is dropped instead of popping back up.
 const runIds = new Map();
@@ -36,7 +41,18 @@ function run(tabId, { selectionText = "", frameId }) {
     readSelection: () => readSelection(tabId, frameId),
     readPage: () => readPage(tabId),
     getSettings,
-    ask: (question, settings) => askChain(question, settings.chain),
+    ask: async (question, settings) => {
+      // storage.session: survives the service worker going idle, not a browser restart.
+      const { frozen = {} } = await chrome.storage.session.get("frozen");
+      return askChain(question, settings.chain, {
+        frozen,
+        log: (line) => console.warn("rvl", line),
+        onFreeze: (key, until) => {
+          frozen[key] = until;
+          chrome.storage.session.set({ frozen });
+        },
+      });
+    },
     show: (state) => show(tabId, state),
     openOptions: () => chrome.runtime.openOptionsPage(),
   }).catch((err) => console.error("rvl failed", err));
@@ -87,6 +103,8 @@ async function getSettings() {
 // The box always lives in the top frame, so it sits in the real bottom-right
 // corner even when the question was selected inside an iframe.
 async function show(tabId, state) {
+  // The page only ever gets "-" for a failure; the reason stays in this log.
+  if (state.kind === "error") console.warn("rvl", state.text);
   try {
     await chrome.scripting.executeScript({ target: { tabId }, files: ["src/content.js"] });
     await chrome.scripting.executeScript({

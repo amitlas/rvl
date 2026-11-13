@@ -63,6 +63,16 @@ export function cleanQuestion(text) {
 // Turns a Gemini HTTP status + JSON body into {answer, reason}, or throws an
 // Error whose message is short enough to show in the on-page box.
 export function parseResponse(status, body) {
+  try {
+    return parse(status, body);
+  } catch (err) {
+    // The HTTP status decides whether the model is frozen (providers.js).
+    err.status = status;
+    throw err;
+  }
+}
+
+function parse(status, body) {
   if (status === 429) {
     throw new Error("Gemini free-tier quota reached, try again later");
   }
@@ -98,7 +108,11 @@ export function normalizeOptions(parsed) {
     .map((o) => ({ label: String(o.label).trim(), correct: o.correct === true }));
 }
 
-export async function askGemini(question, apiKey, { fetchFn = fetch, model = DEFAULT_MODEL, allowMultiple = true } = {}) {
+// A provider that hangs counts as failed, so the next one gets its turn.
+// Keyed providers answer in a second or two; slower ones set their own timeoutMs.
+export const REQUEST_TIMEOUT_MS = 5000;
+
+export async function askGemini(question, apiKey, { fetchFn = fetch, model = DEFAULT_MODEL, allowMultiple = true, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   let res;
   try {
@@ -106,6 +120,7 @@ export async function askGemini(question, apiKey, { fetchFn = fetch, model = DEF
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify(buildRequest(question, { allowMultiple })),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch {
     throw new Error("Could not reach Gemini (network error)");

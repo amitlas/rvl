@@ -1,12 +1,13 @@
 // OpenAI-compatible chat completions (Groq, OpenRouter, ...). Same contract
 // as gemini.js: returns {answer, reason} or throws a short readable Error.
 
-import { buildInstructions, normalizeOptions } from "./gemini.js";
+import { REQUEST_TIMEOUT_MS, buildInstructions, normalizeOptions } from "./gemini.js";
 
-export function buildChatRequest(question, model, { allowMultiple = true } = {}) {
+export function buildChatRequest(question, model, { allowMultiple = true, noTemperature = false } = {}) {
   return {
     model,
-    temperature: 0,
+    // Reasoning models reject a temperature, so those providers leave it out.
+    ...(noTemperature ? {} : { temperature: 0 }),
     messages: [
       { role: "system", content: `${buildInstructions({ allowMultiple })}\nReply with only a JSON object: {"options": [{"label": "...", "correct": true}], "answer": "...", "reason": "..."}` },
       { role: "user", content: question },
@@ -31,6 +32,16 @@ export function extractJson(text) {
 }
 
 export function parseChatResponse(status, body) {
+  try {
+    return parse(status, body);
+  } catch (err) {
+    // The HTTP status decides whether the model is frozen (providers.js).
+    err.status = status;
+    throw err;
+  }
+}
+
+function parse(status, body) {
   if (status === 401 || status === 403) throw new Error("Invalid API key (check options)");
   if (status === 429) throw new Error("Free-tier quota reached, try again later");
   // Pollinations' keyless tier answers 402 once its short-term allowance is used up.
@@ -52,12 +63,12 @@ export function parseChatResponse(status, body) {
 // retryOn402: {tries, delayMs} retries a 402 (the keyless tier's short-term
 // limit, roughly one question per 30s) instead of failing straight away.
 export async function askOpenAICompatible(question, apiKey, {
-  baseUrl, endpoint, model, allowMultiple = true, fetchFn = fetch, retryOn402, sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
+  baseUrl, endpoint, model, allowMultiple = true, fetchFn = fetch, retryOn402, timeoutMs = REQUEST_TIMEOUT_MS, noTemperature, sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
 }) {
   const tries = retryOn402?.tries ?? 1;
   for (let attempt = 1; ; attempt++) {
     try {
-      return await askOnce(question, apiKey, { baseUrl, endpoint, model, allowMultiple, fetchFn });
+      return await askOnce(question, apiKey, { baseUrl, endpoint, model, allowMultiple, fetchFn, timeoutMs, noTemperature });
     } catch (err) {
       if (!(err instanceof LimitError) || attempt >= tries) throw err;
       await sleep(retryOn402.delayMs);
@@ -67,7 +78,7 @@ export async function askOpenAICompatible(question, apiKey, {
 
 class LimitError extends Error {}
 
-async function askOnce(question, apiKey, { baseUrl, endpoint, model, allowMultiple, fetchFn }) {
+async function askOnce(question, apiKey, { baseUrl, endpoint, model, allowMultiple, fetchFn, timeoutMs, noTemperature }) {
   const headers = { "Content-Type": "application/json" };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
   let res;
@@ -75,7 +86,8 @@ async function askOnce(question, apiKey, { baseUrl, endpoint, model, allowMultip
     res = await fetchFn(endpoint ?? `${baseUrl}/chat/completions`, {
       method: "POST",
       headers,
-      body: JSON.stringify(buildChatRequest(question, model, { allowMultiple })),
+      body: JSON.stringify(buildChatRequest(question, model, { allowMultiple, noTemperature })),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch {
     throw new Error("Could not reach the API (network error)");

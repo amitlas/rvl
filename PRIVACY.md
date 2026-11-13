@@ -14,13 +14,16 @@ AI provider to get the answer:
 - **Pollinations** (the default, no key): the selected text is sent over
   HTTPS to text.pollinations.ai (https://pollinations.ai), with no account
   or identifier from rvl.
-- **Google Gemini API**, **Groq** or **OpenRouter**: only if you added your
+- **Google Gemini API**, **Groq**, **OpenRouter**, **OpenAI** or
+  **Anthropic Claude**: only if you added your
   own API key for that provider in rvl's settings. The selected text is sent
   over HTTPS directly from your browser to that provider, under that
   provider's own terms and privacy policy:
   - Google: https://ai.google.dev/gemini-api/terms
   - Groq: https://groq.com/privacy-policy
   - OpenRouter: https://openrouter.ai/privacy
+  - OpenAI: https://openai.com/policies/privacy-policy
+  - Anthropic: https://www.anthropic.com/legal/privacy
 
 rvl does not read pages you do not use it on, and it does not send anything
 else: no browsing history, no URLs, no personal information.

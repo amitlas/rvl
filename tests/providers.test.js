@@ -349,3 +349,114 @@ test("each provider tries its cheapest model first", () => {
   const chain = chainFromStorage({ provider: "gemini", keys: { gemini: "g" } });
   assert.equal(chain[0].model, "gemini-flash-lite-latest");
 });
+
+import { FREEZE_MS, freezeKey } from "../src/providers.js";
+
+test("a model out of quota is frozen for an hour and then skipped without a request", async () => {
+  const chain = chainFromStorage({ provider: "gemini", keys: { gemini: "g" } });
+  const { fetchFn, calls } = routedFetch({ "generativelanguage.googleapis.com": 429 });
+  const frozen = {};
+  const lines = [];
+  const opts = { fetchFn, frozen, now: 1000, onFreeze: (key, until) => { frozen[key] = until; }, log: (l) => lines.push(l) };
+  await askChain("Q", chain, opts);
+  assert.deepEqual(Object.keys(frozen), PROVIDERS.gemini.models.map((model) => freezeKey({ provider: "gemini", model })));
+  assert.ok(Object.values(frozen).every((until) => until === 1000 + FREEZE_MS));
+  assert.equal(lines.length, PROVIDERS.gemini.models.length);
+
+  calls.length = 0;
+  await askChain("Q", chain, { ...opts, now: 1000 + FREEZE_MS - 1 });
+  assert.deepEqual(calls, ["text.pollinations.ai"]); // straight to the free one
+
+  calls.length = 0;
+  await askChain("Q", chain, { ...opts, now: 1000 + FREEZE_MS });
+  assert.equal(calls[0], "generativelanguage.googleapis.com"); // hour over: asked again
+});
+
+test("only quota freezes: a bad key or an outage does not, and the keyless provider never does", async () => {
+  const chain = chainFromStorage({ provider: "groq", keys: { groq: "bad", openrouter: "o" } });
+  const { fetchFn } = routedFetch({ "api.groq.com": 401, "openrouter.ai": 500, "text.pollinations.ai": 429 });
+  const frozenKeys = [];
+  await assert.rejects(askChain("Q", chain, { fetchFn, onFreeze: (key) => frozenKeys.push(key) }));
+  assert.deepEqual(frozenKeys, []);
+});
+
+test("keyed providers get 5 seconds to answer, the slow keyless one 20", async () => {
+  const waits = {};
+  const realTimeout = AbortSignal.timeout;
+  AbortSignal.timeout = (ms) => ({ ms });
+  try {
+    const fetchFn = async (url, init) => {
+      waits[new URL(url).host] = init.signal.ms;
+      return { status: 500, json: async () => ({}) };
+    };
+    const chain = chainFromStorage({ provider: "gemini", keys: { gemini: "g", groq: "q" } });
+    await assert.rejects(askChain("Q", chain, { fetchFn }));
+  } finally {
+    AbortSignal.timeout = realTimeout;
+  }
+  assert.deepEqual(waits, { "generativelanguage.googleapis.com": 5000, "api.groq.com": 5000, "text.pollinations.ai": 20000 });
+});
+
+import { askAnthropic, buildMessagesRequest, parseMessagesResponse } from "../src/anthropic.js";
+
+test("Claude request: Messages API shape, browser header, no sampling parameters", async () => {
+  const req = buildMessagesRequest("Q", "claude-opus-5-5", { allowMultiple: false });
+  assert.equal(req.model, "claude-opus-5-5");
+  assert.match(req.system, /single correct option/);
+  assert.deepEqual(req.messages, [{ role: "user", content: "Q" }]);
+  assert.equal(req.output_config.format.type, "json_schema");
+  assert.equal(req.output_config.format.schema.additionalProperties, false);
+  assert.ok(!("temperature" in req) && !("thinking" in req));
+
+  let seen;
+  const fetchFn = async (url, init) => {
+    seen = { url, headers: init.headers };
+    return { status: 200, json: async () => ({ content: [{ type: "thinking", thinking: "" }, { type: "text", text: '{"options":[{"label":"A","correct":false},{"label":"B","correct":true}],"answer":"B","reason":"r"}' }] }) };
+  };
+  const out = await ask("Q", { provider: "anthropic", apiKey: "k" }, { fetchFn });
+  assert.equal(seen.url, "https://api.anthropic.com/v1/messages");
+  assert.equal(seen.headers["x-api-key"], "k");
+  assert.equal(seen.headers["anthropic-dangerous-direct-browser-access"], "true");
+  assert.deepEqual(out, { answer: "B", reason: "r", options: [{ label: "A", correct: false }, { label: "B", correct: true }] });
+});
+
+test("Claude errors: bad key, refusal, and the status on every error", () => {
+  assert.throws(() => parseMessagesResponse(401, {}), (e) => /API key/.test(e.message) && e.status === 401);
+  assert.throws(() => parseMessagesResponse(402, { error: { message: "billing" } }), (e) => e.message === "billing" && e.status === 402);
+  assert.throws(() => parseMessagesResponse(200, { stop_reason: "refusal", content: [] }), /declined/);
+});
+
+test("OpenAI is asked without a temperature, the free providers keep temperature 0", async () => {
+  const bodies = {};
+  const fetchFn = async (url, init) => {
+    bodies[new URL(url).host] = JSON.parse(init.body);
+    return { status: 200, json: async () => chatBody('{"answer":"A"}') };
+  };
+  await ask("Q", { provider: "openai", apiKey: "k" }, { fetchFn });
+  await ask("Q", { provider: "groq", apiKey: "k" }, { fetchFn });
+  assert.ok(!("temperature" in bodies["api.openai.com"]));
+  assert.equal(bodies["api.openai.com"].model, PROVIDERS.openai.models[0]);
+  assert.equal(bodies["api.groq.com"].temperature, 0);
+});
+
+test("each provider freezes on its own out-of-credit statuses and on nothing else", async () => {
+  const frozenFor = async (provider, host, status) => {
+    const chain = chainFromStorage({ provider, keys: { [provider]: "k" } }).filter((c) => c.provider === provider);
+    const fetchFn = async () => ({ status, json: async () => ({}) });
+    const keys = [];
+    await assert.rejects(askChain("Q", chain, { fetchFn, onFreeze: (key) => keys.push(key) }));
+    return keys.length > 0;
+  };
+  const expected = {
+    gemini: { 429: true, 402: true, 500: false },
+    groq: { 429: true, 402: false, 500: false },
+    openrouter: { 429: true, 402: true, 403: false },
+    openai: { 429: true, 402: false, 500: false },
+    anthropic: { 429: true, 402: true, 400: false, 529: false },
+  };
+  for (const [provider, cases] of Object.entries(expected)) {
+    for (const [status, frozen] of Object.entries(cases)) {
+      assert.equal(await frozenFor(provider, "", Number(status)), frozen, `${provider} ${status}`);
+    }
+  }
+});

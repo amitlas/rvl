@@ -5,7 +5,8 @@ Chrome extension (Manifest V3). Select a multiple-choice question on any page
 then right-click **rvl** or press **Ctrl+Z** (the Control key, on Mac and
 Windows). A small box in the bottom-right corner shows the correct option's
 letter (or two letters, if two options are correct and that setting is on).
-It only ever shows a letter; any failure shows "-" (hover it for the reason).
+It only ever shows a letter; any failure shows "-" (the reason is only in the
+log: `chrome://extensions`, rvl's **service worker** link).
 Click the box, press Esc, or press **Ctrl+X** (Alt+X on Windows) to close it;
 Ctrl+X also drops an answer still loading. It hides by itself after 20s.
 
@@ -31,10 +32,18 @@ in `chrome://extensions`. Do not remove and re-add it: that deletes saved keys.
   Google Gemini (aistudio.google.com/apikey), Groq (console.groq.com/keys),
   OpenRouter (openrouter.ai/keys). Add keys in rvl's settings and press
   **Save and test**.
+- **Paid providers** (your own paid key): OpenAI / ChatGPT
+  (platform.openai.com/api-keys) and Anthropic Claude
+  (platform.claude.com/settings/keys). A paid Gemini key goes in the same
+  Gemini field. They get 15 seconds to answer instead of 5.
 
 Fallback is automatic: the selected provider first, then its other models
 (each has its own free quota), then the other providers with a key, and
-Pollinations last. Keys stay in this browser only (`chrome.storage.local`).
+Pollinations last. A model that answers "out of quota or credit" (each provider has its own
+status codes for that, listed in `src/providers.js`) is skipped without
+being asked for the next hour (until Chrome restarts or a key changes), and a
+provider that does not answer within 5 seconds (20 for Pollinations, which is
+slower) counts as failed. Keys stay in this browser only (`chrome.storage.local`).
 
 ## Chrome Web Store
 
@@ -55,7 +64,7 @@ digit or a few named keys, and rejects Cmd+Option combinations.
 - `src/background.js` - context menu, keyboard command, chrome.* wiring
 - `src/handler.js` - the flow (read selection, ask, choose what to show), no chrome.* calls
 - `src/providers.js` - providers, models, fallback chain
-- `src/gemini.js`, `src/openai.js` - one per API format
+- `src/gemini.js`, `src/openai.js`, `src/anthropic.js` - one per API format
 - `src/visible.js` - text inside the viewport, sent when nothing is selected
 - `src/content.js` - the on-page box (shadow DOM, injected on demand)
 - `options/` - settings page

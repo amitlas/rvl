@@ -54,10 +54,9 @@
       box.dir = "auto";
       box.textContent = state.answer;
     } else {
-      // Every failure is a bare "-"; the reason is only in the hover title.
+      // Every failure is a bare "-"; the reason is only in the service worker log.
       box.classList.add("error");
       box.textContent = "-";
-      box.title = state.text || "Error";
     }
 
     root.appendChild(box);
