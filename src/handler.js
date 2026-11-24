@@ -47,7 +47,7 @@ export async function handleRvl({ selectionText = "" } = {}, deps) {
   try {
     const result = await deps.ask(question, settings);
     if (deps.cancelled?.()) return;
-    const shown = chooseAnswer(result, { allowMultiple: settings.allowMultiple !== false, hebrew: /[\u0590-\u05FF]/.test(question) });
+    const shown = chooseAnswer(result, { allowMultiple: settings.allowMultiple !== false, stated: questionStatedCount(question), hebrew: /[\u0590-\u05FF]/.test(question) });
     await deps.show({ kind: "result", answer: shown, reason: result.reason });
   } catch (err) {
     if (deps.cancelled?.()) return;
@@ -63,13 +63,29 @@ export function bareLabel(answer) {
   return parts.length ? parts.map(one).join(", ") : String(answer).trim();
 }
 
+// How many options the question asks for: a number, Infinity for "all of them",
+// or null when the question says nothing. Read locally so it wins over the
+// allowMultiple setting.
+const HE_NUMBERS = { שתיים: 2, שניים: 2, שתי: 2, שני: 2, שלוש: 3, שלושה: 3, ארבע: 4, ארבעה: 4 };
+const EN_NUMBERS = { two: 2, three: 3, four: 4, five: 5 };
+export function questionStatedCount(question = "") {
+  const q = String(question);
+  if (/\b(?:select|choose|pick|mark|check|circle) all\b|all (?:that|of the) (?:apply|correct|true)|\bmore than one\b|כל (?:ה)?(?:תשובות|נכונות|אפשרויות)/i.test(q)) return Infinity;
+  const word = "(two|three|four|five|\\d+|שתיים|שניים|שתי|שני|שלוש|שלושה|ארבע|ארבעה)";
+  const m = q.match(new RegExp(`(?:\\b(?:select|choose|pick|mark|check|circle|which)\\s+${word}\\b|(?:בחר|בחרו|סמן|סמנו|בחרי|סמני)\\s+${word}|\\b${word}\\s+(?:correct|right)\\s+(?:answers|options))`, "i"));
+  if (!m) return null;
+  const hit = (m[1] ?? m[2] ?? m[3]).toLowerCase();
+  const n = EN_NUMBERS[hit] ?? HE_NUMBERS[hit] ?? parseInt(hit, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 // The per-option verdicts decide what is shown: exactly the options judged
 // correct, when that is 1 (or up to 2 if allowed). Otherwise, or when the
 // model sent no verdicts, fall back to its "answer" field, capped the same way.
 // Only letters are ever shown: an option without a short label (the model
 // quoted its text) becomes its position letter, A/B/C or א/ב/ג.
-export function chooseAnswer({ answer, options = [] }, { allowMultiple = true, hebrew = false } = {}) {
-  const limit = allowMultiple ? 2 : 1;
+export function chooseAnswer({ answer, options = [] }, { allowMultiple = true, stated = null, hebrew = false } = {}) {
+  const limit = stated ?? (allowMultiple ? 2 : 1);
   const letters = hebrew ? "אבגדהוזחטי" : "ABCDEFGHIJ";
   // "?" is the model saying "not a question": shown as "-" like every failure.
   const short = (label) => label.length <= 3 && label !== "?";

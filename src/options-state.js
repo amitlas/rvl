@@ -32,3 +32,8 @@ export function withProvider(stored, providerId) {
   return { ...stored, provider: PROVIDERS[providerId] ? providerId : stored.provider };
 }
 
+
+// The API key field flips between hidden (password) and full text.
+export function toggleKeyVisibility(type) {
+  return type === "password" ? "text" : "password";
+}

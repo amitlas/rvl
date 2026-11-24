@@ -33,6 +33,7 @@
   <div id="keyedSection">
     <label for="apiKey">API key</label>
     <input id="apiKey" type="password" autocomplete="off" spellcheck="false">
+    <button type="button" id="toggleKey">Show</button>
     <div class="hint">Get a key at <a id="keyUrl" target="_blank" rel="noopener"></a>. Stored only in this browser.</div>
 
     <label for="model">Model</label>
@@ -46,7 +47,7 @@
   </div>
 
   <label><input id="allowMultiple" type="checkbox" style="width:auto"> Allow two correct answers</label>
-  <div class="hint">Usually one answer is shown. When on, it may show two (for example "A, C"), only if two are correct. Never more.</div>
+  <div class="hint">Usually one answer is shown. When on, it may show two (for example "A, C"), only if two are correct. Never more, unless the question says how many to choose (then that many, or all correct ones if it says all).</div>
 
   <button id="save">Save and test</button>
   <div id="status"></div>

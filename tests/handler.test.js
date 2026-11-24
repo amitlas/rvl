@@ -324,3 +324,38 @@ test("handleRvl uses Hebrew position letters for a Hebrew question", async () =>
   await handleRvl({}, f.deps);
   assert.equal(f.shown[1].answer, "ב");
 });
+
+import { questionStatedCount } from "../src/handler.js";
+
+test("questionStatedCount reads how many options the question asks for", () => {
+  assert.equal(questionStatedCount("Choose two correct answers: a, b, c"), 2);
+  assert.equal(questionStatedCount("select 3 of the following"), 3);
+  assert.equal(questionStatedCount("Which two options are correct?"), 2);
+  assert.equal(questionStatedCount("בחר שתיים מהתשובות הנכונות"), 2);
+  assert.equal(questionStatedCount("סמן שלוש תשובות נכונות"), 3);
+  assert.equal(questionStatedCount("Select all that apply"), Infinity);
+  assert.equal(questionStatedCount("בחר את כל התשובות הנכונות"), Infinity);
+  assert.equal(questionStatedCount("What is the capital of France?"), null);
+});
+
+test("chooseAnswer honors a count the question states, even with two answers off", () => {
+  const three = ["A", "B", "C"].map((label) => ({ label, correct: true }));
+  assert.equal(chooseAnswer({ answer: "A, B, C", options: three }, { allowMultiple: false, stated: 3 }), "A, B, C");
+  assert.equal(chooseAnswer({ answer: "A, B, C", options: three }, { allowMultiple: true, stated: Infinity }), "A, B, C");
+  assert.equal(chooseAnswer({ answer: "A, B, C", options: three }, { allowMultiple: true }), "A, B");
+});
+
+test("handleRvl passes the stated count from the question to the shown answer", async () => {
+  const shown = [];
+  await handleRvl({}, {
+    readSelection: async () => "Select all that apply\nA. x\nB. y\nC. z",
+    getSettings: async () => ({ provider: "gemini", apiKey: "k", allowMultiple: false }),
+    ask: async () => ({
+      answer: "A, B, C", reason: "r",
+      options: [{ label: "A.", correct: true }, { label: "B.", correct: true }, { label: "C.", correct: true }],
+    }),
+    show: async (s) => { shown.push(s); },
+    openOptions() {},
+  });
+  assert.equal(shown.at(-1).answer, "A, B, C");
+});

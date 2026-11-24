@@ -1,3 +1,4 @@
+import { toggleKeyVisibility } from "../src/options-state.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildInstructions, buildRequest } from "../src/gemini.js";
@@ -459,4 +460,15 @@ test("each provider freezes on its own out-of-credit statuses and on nothing els
       assert.equal(await frozenFor(provider, "", Number(status)), frozen, `${provider} ${status}`);
     }
   }
+});
+
+test("the stated-count rule is in the instructions with and without multiple answers", () => {
+  for (const allowMultiple of [true, false]) {
+    assert.match(buildInstructions({ allowMultiple }), /says how many options to choose/);
+  }
+});
+
+test("the key field toggles between hidden and visible", () => {
+  assert.equal(toggleKeyVisibility("password"), "text");
+  assert.equal(toggleKeyVisibility("text"), "password");
 });

@@ -1,6 +1,6 @@
 import { PROVIDERS, fetchModels, modelOptions, askChain, chainFromStorage, TEST_QUESTION, TEST_EXPECTED } from "../src/providers.js";
 import { describeTestResult } from "../src/keytest.js";
-import { normalizeStored, withEdit, withProvider } from "../src/options-state.js";
+import { normalizeStored, withEdit, withProvider, toggleKeyVisibility } from "../src/options-state.js";
 
 const providerSelect = document.getElementById("provider");
 const apiKeyInput = document.getElementById("apiKey");
@@ -93,6 +93,10 @@ apiKeyInput.addEventListener("input", () => {
   keyTimer = setTimeout(() => loadLiveModels(providerSelect.value), 600);
 });
 modelInput.addEventListener("change", () => { captureCurrent(); persist(); });
+document.getElementById("toggleKey").addEventListener("click", (event) => {
+  apiKeyInput.type = toggleKeyVisibility(apiKeyInput.type);
+  event.currentTarget.textContent = apiKeyInput.type === "password" ? "Show" : "Hide";
+});
 allowMultipleInput.addEventListener("change", () => {
   stored = { ...stored, allowMultiple: allowMultipleInput.checked };
   persist();

@@ -14,16 +14,19 @@ If the options have no labels, return the start of the correct option's text ins
 Return "reason" as one short sentence, in the question's language, explaining why.
 If the text is not a multiple-choice question, return "answer": "?" and say so in "reason".`;
 
-const SINGLE = "Find the single correct option.";
+const SINGLE = "Find the single correct option, unless the question says to choose more.";
+// Applies in both modes: a count the question states beats the two-answer setting.
+const STATED = `If the question says how many options to choose (for example "choose two", "select 3" or
+"select all that apply"), return that many correct options, or every correct option, even when that is more than two.`;
 // Multiple answers are allowed, never required: one correct option stays the
 // expected case, and the model lists more only when more are truly correct.
 const MULTIPLE = `Check every option on its own, as true or false. One or two options may be correct,
 even when the question does not say so (for example a single "Answer" field).
 If exactly two options are true, return both labels in "answer", separated by ", " (for example "A, C").
-If only one is true, return only that one. Never return more than two.`;
+If only one is true, return only that one. Never return more than two, unless the question says how many to choose.`;
 
 export function buildInstructions({ allowMultiple = true } = {}) {
-  return `${allowMultiple ? MULTIPLE : SINGLE}\n${BASE_INSTRUCTIONS}`;
+  return `${allowMultiple ? MULTIPLE : SINGLE}\n${STATED}\n${BASE_INSTRUCTIONS}`;
 }
 
 export function buildRequest(question, { allowMultiple = true } = {}) {
