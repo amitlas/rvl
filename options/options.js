@@ -142,7 +142,8 @@ document.getElementById("save").addEventListener("click", async () => {
   try {
     // Same fallback across this provider's models as real use, so one
     // model being out of quota does not report a working key as broken.
-    const chain = chainFromStorage(stored).filter((c) => c.provider === stored.provider);
+    const { remoteKeys = {} } = await chrome.storage.session.get("remoteKeys");
+    const chain = chainFromStorage(stored, remoteKeys).filter((c) => c.provider === stored.provider);
     const answer = await askChain(TEST_QUESTION, chain);
     result = describeTestResult({ answer: answer.answer, expected: TEST_EXPECTED });
   } catch (err) {
