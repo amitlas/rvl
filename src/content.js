@@ -57,6 +57,8 @@
       // Every failure is a bare "-"; the reason is only in the service worker log.
       box.classList.add("error");
       box.textContent = "-";
+      // Hover the box to read why it failed.
+      box.title = state.text || "";
     }
 
     root.appendChild(box);
