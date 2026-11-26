@@ -100,7 +100,6 @@ document.getElementById("toggleKey").addEventListener("click", (event) => {
 const keepLocalInput = document.getElementById("keepLocal");
 chrome.storage.local.get({ keepLocalKey: true }).then(({ keepLocalKey }) => { keepLocalInput.checked = keepLocalKey !== false; });
 keepLocalInput.addEventListener("change", () => chrome.storage.local.set({ keepLocalKey: keepLocalInput.checked }));
-document.getElementById("shortcutsButton").addEventListener("click", () => chrome.tabs.create({ url: "chrome://extensions/shortcuts" }));
 allowMultipleInput.addEventListener("change", () => {
   stored = { ...stored, allowMultiple: allowMultipleInput.checked };
   persist();
@@ -134,8 +133,10 @@ document.getElementById("save").addEventListener("click", async () => {
 
 // Chrome owns the shortcut setting; the page only shows it and links to it.
 chrome.commands.getAll().then((commands) => {
-  const shortcut = commands.find((c) => c.name === "rvl")?.shortcut;
-  document.getElementById("shortcut").textContent = shortcut || "not set";
+  for (const name of ["rvl", "rvl-hide", "rvl-pull-keys"]) {
+    const shortcut = commands.find((c) => c.name === name)?.shortcut;
+    document.getElementById(`shortcut-${name}`).textContent = shortcut || "not set";
+  }
 });
 
 document.getElementById("changeShortcut").addEventListener("click", () => {

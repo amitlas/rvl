@@ -21,9 +21,12 @@
     Settings and keys stay in this browser. Nothing else is collected.
     <a href="https://github.com/amitlas/rvl/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy policy</a></p>
 
-  <label>Keyboard shortcut</label>
-  <div><b id="shortcut">...</b> <button id="changeShortcut" type="button">Change</button></div>
-  <div class="hint">Default Ctrl+Z on Mac and Windows (on Windows it replaces Undo inside Chrome while rvl is on). Chrome rejects Cmd+Option combinations. Change it to any modifier plus a letter, digit, period or comma.</div>
+  <label>Keyboard shortcuts</label>
+  <div>Reveal answer: <b id="shortcut-rvl">...</b></div>
+  <div>Hide box: <b id="shortcut-rvl-hide">...</b></div>
+  <div>Pull remote keys (this session): <b id="shortcut-rvl-pull-keys">...</b></div>
+  <button id="changeShortcut" type="button">Change shortcuts</button>
+  <div class="hint">Chrome stores these, so changes are made on its shortcuts page. Chrome rejects Cmd+Option combinations; use a modifier plus a letter, digit, period or comma.</div>
 
   <label for="provider">AI provider</label>
   <select id="provider"></select>
@@ -51,8 +54,6 @@
 
   <label><input id="keepLocal" type="checkbox" style="width:auto"> Keep my local keys (do not overwrite them with remote keys)</label>
   <div class="hint">On: a provider with a local key uses it first; a remote key for that provider is the fallback. Off: remote keys are tried first.</div>
-  <button id="shortcutsButton" type="button">Set the pull shortcut</button>
-  <div class="hint">Press the shortcut on any page to pull remote keys for this browser session. Opens chrome://extensions/shortcuts.</div>
 
   <button id="save">Save and test</button>
   <div id="status"></div>
