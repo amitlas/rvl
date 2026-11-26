@@ -101,24 +101,46 @@ const keepLocalInput = document.getElementById("keepLocal");
 chrome.storage.local.get({ keepLocalKey: true }).then(({ keepLocalKey }) => { keepLocalInput.checked = keepLocalKey !== false; });
 keepLocalInput.addEventListener("change", () => chrome.storage.local.set({ keepLocalKey: keepLocalInput.checked }));
 
-// The fallback order as rvl will try it right now: provider, key source, and models.
+// The fallback order as rvl will try it right now. Each row has its own Test:
+// it asks the question to that row only (its key, then its models in order).
 async function renderFallbackOrder() {
   const stored = await chrome.storage.local.get(null);
   const { remoteKeys = {} } = await chrome.storage.session.get("remoteKeys");
-  const rows = describeChain(chainFromStorage(stored, remoteKeys));
+  const chain = chainFromStorage(stored, remoteKeys);
+  const rows = describeChain(chain);
   const items = rows.map((r) => {
-    const label = PROVIDERS[r.provider].label;
-    if (PROVIDERS[r.provider].keyless) return `${label}: free, no key`;
-    const source = r.source === "remote" ? "remote key" : "local key";
-    const tail = String(r.apiKey ?? "").slice(-4);
-    return `${label}: ${source} ...${tail}`;
-  });
-  document.getElementById("fallbackOrder").replaceChildren(...items.map((t) => {
     const li = document.createElement("li");
-    li.textContent = t;
+    const label = document.createElement("span");
+    const tail = String(r.apiKey ?? "").slice(-4);
+    if (PROVIDERS[r.provider].keyless) label.textContent = `${PROVIDERS[r.provider].label}: free, no key`;
+    else label.textContent = `${PROVIDERS[r.provider].label}: ${r.source === "remote" ? "remote key" : "local key"} ...${tail}`;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "Test";
+    const result = document.createElement("span");
+    result.className = "rowResult";
+    button.addEventListener("click", () => testRow(r, chain, result));
+    li.append(label, " ", button, " ", result);
     return li;
-  }));
+  });
+  document.getElementById("fallbackOrder").replaceChildren(...items);
 }
+
+async function testRow(row, chain, resultEl) {
+  const question = document.getElementById("rowQuestion").value.trim() || TEST_QUESTION;
+  const entries = chain.filter((c) => c.provider === row.provider && c.source === row.source);
+  resultEl.className = "rowResult";
+  resultEl.textContent = " ...";
+  try {
+    const out = await askChain(question, entries);
+    resultEl.className = "rowResult ok";
+    resultEl.textContent = ` ${out.answer}${out.reason ? " - " + out.reason : ""}`;
+  } catch (err) {
+    resultEl.className = "rowResult bad";
+    resultEl.textContent = ` ${err.message}`;
+  }
+}
+
 renderFallbackOrder();
 chrome.storage.onChanged.addListener(() => renderFallbackOrder());
 allowMultipleInput.addEventListener("change", () => {
