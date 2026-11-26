@@ -115,6 +115,11 @@ async function renderFallbackOrder() {
     const tail = String(r.apiKey ?? "").slice(-4);
     if (PROVIDERS[r.provider].keyless) label.textContent = `${PROVIDERS[r.provider].label}: free, no key`;
     else label.textContent = `${PROVIDERS[r.provider].label}: ${r.source === "remote" ? "remote key" : "local key"} ...${tail}`;
+    const enabled = document.createElement("input");
+    enabled.type = "checkbox";
+    enabled.style.width = "auto";
+    enabled.checked = !(stored.disabledRows ?? []).includes(rowKey(r));
+    enabled.addEventListener("change", () => setRowEnabled(rowKey(r), enabled.checked));
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = "Test";
@@ -126,17 +131,24 @@ async function renderFallbackOrder() {
       result.textContent = ` ${saved.text}`;
     }
     button.addEventListener("click", () => testRow(r, chain, result));
-    li.append(label, " ", button, " ", result);
+    li.append(enabled, " ", label, " ", button, " ", result);
     return li;
   });
   document.getElementById("fallbackOrder").replaceChildren(...items);
+}
+
+// Turning a row off leaves it out of the chain. Stored locally, so it persists.
+async function setRowEnabled(key, enabled) {
+  const { disabledRows = [] } = await chrome.storage.local.get({ disabledRows: [] });
+  const next = enabled ? disabledRows.filter((k) => k !== key) : [...new Set([...disabledRows, key])];
+  await chrome.storage.local.set({ disabledRows: next });
 }
 
 // Test results survive re-renders and reloads of this page, until Chrome closes.
 const rowKey = (row) => `${row.provider}/${row.source}`;
 
 async function testRow(row, chain, resultEl) {
-  const question = document.getElementById("rowQuestion").value.trim() || TEST_QUESTION;
+  const question = TEST_QUESTION;
   const entries = chain.filter((c) => c.provider === row.provider && c.source === row.source);
   resultEl.className = "rowResult";
   resultEl.textContent = " ...";

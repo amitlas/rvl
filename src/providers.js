@@ -147,6 +147,8 @@ export function chainFromStorage(stored = {}, remote = {}) {
         allowMultiple: stored.allowMultiple,
       });
       if (!first.apiKey && !PROVIDERS[id].keyless) continue;
+      // Rows the user turned off in options are left out of the chain.
+      if ((stored.disabledRows ?? []).includes(`${id}/${source}`)) continue;
       for (const model of [first.model, ...PROVIDERS[id].models.filter((m) => m !== first.model)]) {
         chain.push({ ...first, model, source });
       }

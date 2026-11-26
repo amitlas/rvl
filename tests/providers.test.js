@@ -510,3 +510,9 @@ test("describeChain groups the chain into provider and key-source rows, in try o
   assert.equal(rows[0].models.length, PROVIDERS.groq.models.length);
   assert.equal(rows.at(-1).provider, "pollinations");
 });
+
+test("chainFromStorage leaves out the rows the user turned off", () => {
+  const chain = chainFromStorage({ provider: "groq", keys: { groq: "L" }, disabledRows: ["groq/local"] }, { groq: "R" });
+  assert.equal(chain.filter((c) => c.provider === "groq" && c.source === "local").length, 0);
+  assert.ok(chain.some((c) => c.provider === "groq" && c.source === "remote"));
+});
