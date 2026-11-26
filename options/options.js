@@ -108,10 +108,10 @@ async function renderFallbackOrder() {
   const rows = describeChain(chainFromStorage(stored, remoteKeys));
   const items = rows.map((r) => {
     const label = PROVIDERS[r.provider].label;
-    if (PROVIDERS[r.provider].keyless) return `${label}: free, no key (${r.models.join(", ")})`;
+    if (PROVIDERS[r.provider].keyless) return `${label}: free, no key`;
     const source = r.source === "remote" ? "remote key" : "local key";
     const tail = String(r.apiKey ?? "").slice(-4);
-    return `${label}: ${source} ...${tail} (${r.models.join(", ")})`;
+    return `${label}: ${source} ...${tail}`;
   });
   document.getElementById("fallbackOrder").replaceChildren(...items.map((t) => {
     const li = document.createElement("li");
