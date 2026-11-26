@@ -106,7 +106,8 @@ keepLocalInput.addEventListener("change", () => chrome.storage.local.set({ keepL
 async function renderFallbackOrder() {
   const stored = await chrome.storage.local.get(null);
   const { remoteKeys = {} } = await chrome.storage.session.get("remoteKeys");
-  const chain = chainFromStorage(stored, remoteKeys);
+  // Shown even when turned off, so the row can be turned back on.
+  const chain = chainFromStorage({ ...stored, disabledRows: [] }, remoteKeys);
   const rows = describeChain(chain);
   const { rowResults = {} } = await chrome.storage.session.get("rowResults");
   const items = rows.map((r) => {
