@@ -1,6 +1,7 @@
 import { askChain, chainFromStorage, settingsFromStorage, PROVIDERS } from "./providers.js";
 import { handleRvl } from "./handler.js";
 import { visibleText } from "./visible.js";
+import { pullRemoteKeys, REMOTE_STORAGE_KEY } from "./remote-keys.js";
 
 const MENU_ID = "rvl";
 
@@ -22,6 +23,7 @@ chrome.commands.onCommand.addListener((command, tab) => {
   if (!tab?.id) return;
   if (command === "rvl") run(tab.id, {});
   if (command === "rvl-hide") hide(tab.id);
+  if (command === "rvl-pull-keys") pullKeys(tab?.id);
 });
 
 // A new or changed key gets tried right away instead of waiting out a freeze.
@@ -95,9 +97,24 @@ async function hide(tabId) {
 // chain rides along so askChain can fall back to the others.
 async function getSettings() {
   const stored = await chrome.storage.local.get(null);
-  const chain = chainFromStorage(stored);
+  const { [REMOTE_STORAGE_KEY]: remote = {} } = await chrome.storage.session.get(REMOTE_STORAGE_KEY);
+  const chain = chainFromStorage(stored, remote);
   const first = chain[0] ?? settingsFromStorage(stored);
   return { ...first, keyless: chain.some((c) => PROVIDERS[c.provider].keyless), chain };
+}
+
+// Pulls the owner's remote keys on the shortcut only (never on browser start).
+// Session storage holds them until Chrome closes. The box shows ✓ with the count,
+// or ✗; the reason goes to the service worker log.
+async function pullKeys(tabId) {
+  try {
+    const keys = await pullRemoteKeys();
+    await chrome.storage.session.set({ [REMOTE_STORAGE_KEY]: keys });
+    if (tabId) show(tabId, { kind: "result", answer: `✓${Object.keys(keys).length}` });
+  } catch (err) {
+    console.error("rvl key pull failed", err.message);
+    if (tabId) show(tabId, { kind: "result", answer: "✗" });
+  }
 }
 
 // The box always lives in the top frame, so it sits in the real bottom-right

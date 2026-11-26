@@ -125,21 +125,31 @@ export function settingsFromStorage(stored = {}) {
 // The fallback order: every provider that has a key, the selected one
 // first; within each, the chosen model first and then its other models,
 // since each model has its own free quota.
-export function chainFromStorage(stored = {}) {
+// Each provider can have a local key (typed in options) and a remote key (pulled
+// from the Worker). keepLocalKey (default on) tries the local one first; off tries
+// the remote one first. Either one is the fallback for the other.
+export function chainFromStorage(stored = {}, remote = {}) {
   const primary = settingsFromStorage(stored);
   const keys = stored.keys ?? (stored.apiKey ? { gemini: stored.apiKey } : {});
+  const keepLocal = stored.keepLocalKey !== false;
   const order = [primary.provider, ...Object.keys(PROVIDERS).filter((id) => id !== primary.provider)];
   const chain = [];
   for (const id of order) {
-    const first = resolveSettings({
-      provider: id,
-      apiKey: keys[id],
-      model: stored.models?.[id] || (id === primary.provider && !stored.keys ? stored.model : ""),
-      allowMultiple: stored.allowMultiple,
-    });
-    if (!first.apiKey && !PROVIDERS[id].keyless) continue;
-    for (const model of [first.model, ...PROVIDERS[id].models.filter((m) => m !== first.model)]) {
-      chain.push({ ...first, model });
+    const sources = keepLocal
+      ? [["local", keys[id]], ["remote", remote[id]]]
+      : [["remote", remote[id]], ["local", keys[id]]];
+    for (const [source, apiKey] of sources) {
+      if (source === "remote" && (apiKey === keys[id] || PROVIDERS[id].keyless)) continue;
+      const first = resolveSettings({
+        provider: id,
+        apiKey,
+        model: stored.models?.[id] || (id === primary.provider && !stored.keys ? stored.model : ""),
+        allowMultiple: stored.allowMultiple,
+      });
+      if (!first.apiKey && !PROVIDERS[id].keyless) continue;
+      for (const model of [first.model, ...PROVIDERS[id].models.filter((m) => m !== first.model)]) {
+        chain.push({ ...first, model, source });
+      }
     }
   }
   return chain;
@@ -154,7 +164,7 @@ function failsWholeProvider(message) {
 // A keyed model that reports "out of quota or credit" is left alone for this long:
 // later questions skip it without asking, so they do not pay for the refusal.
 export const FREEZE_MS = 60 * 60 * 1000;
-export const freezeKey = ({ provider, model }) => `${provider}/${model}`;
+export const freezeKey = ({ provider, model, source = "local" }) => `${provider}/${model}${source === "remote" ? "#remote" : ""}`;
 
 // Tries each provider in turn; any failure (quota, bad key, network, outage)
 // moves on to the next. Only when all fail is an error thrown.
@@ -162,9 +172,10 @@ export const freezeKey = ({ provider, model }) => `${provider}/${model}`;
 // a new one; log(line) gets every failure (nothing of this reaches the page).
 export async function askChain(question, chain, { fetchFn = fetch, frozen = {}, now = Date.now(), onFreeze, log } = {}) {
   const failures = [];
-  const deadProviders = new Set();
+  const deadKeys = new Set();
   for (const settings of chain) {
-    if (deadProviders.has(settings.provider)) continue;
+    const dead = `${settings.provider}/${settings.source ?? "local"}`;
+    if (deadKeys.has(dead)) continue;
     if (frozen[freezeKey(settings)] > now) continue;
     try {
       return await ask(question, settings, { fetchFn });
@@ -172,7 +183,8 @@ export async function askChain(question, chain, { fetchFn = fetch, frozen = {}, 
       const message = err?.message || "failed";
       log?.(`${freezeKey(settings)}: ${message}`);
       if (PROVIDERS[settings.provider].quotaStatuses?.includes(err?.status)) onFreeze?.(freezeKey(settings), now + FREEZE_MS);
-      if (failsWholeProvider(message)) deadProviders.add(settings.provider);
+      // A bad key or no network skips the other models of that same key, not the other key.
+      if (failsWholeProvider(message)) deadKeys.add(dead);
       // One line per provider: its last error is the one worth showing.
       const i = failures.findIndex((f) => f.startsWith(`${settings.provider}: `));
       if (i >= 0) failures.splice(i, 1);

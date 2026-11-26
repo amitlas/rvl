@@ -97,6 +97,10 @@ document.getElementById("toggleKey").addEventListener("click", (event) => {
   apiKeyInput.type = toggleKeyVisibility(apiKeyInput.type);
   event.currentTarget.textContent = apiKeyInput.type === "password" ? "Show" : "Hide";
 });
+const keepLocalInput = document.getElementById("keepLocal");
+chrome.storage.local.get({ keepLocalKey: true }).then(({ keepLocalKey }) => { keepLocalInput.checked = keepLocalKey !== false; });
+keepLocalInput.addEventListener("change", () => chrome.storage.local.set({ keepLocalKey: keepLocalInput.checked }));
+document.getElementById("shortcutsButton").addEventListener("click", () => chrome.tabs.create({ url: "chrome://extensions/shortcuts" }));
 allowMultipleInput.addEventListener("change", () => {
   stored = { ...stored, allowMultiple: allowMultipleInput.checked };
   persist();

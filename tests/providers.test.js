@@ -472,3 +472,33 @@ test("the key field toggles between hidden and visible", () => {
   assert.equal(toggleKeyVisibility("password"), "text");
   assert.equal(toggleKeyVisibility("text"), "password");
 });
+
+test("chainFromStorage puts the local key first, then the remote key, unless keepLocalKey is off", () => {
+  const keysOf = (chain, id) => [...new Set(chain.filter((c) => c.provider === id).map((c) => c.apiKey))];
+  const stored = { provider: "gemini", keys: { gemini: "L" } };
+  assert.deepEqual(keysOf(chainFromStorage(stored, { gemini: "R" }), "gemini"), ["L", "R"]);
+  assert.deepEqual(keysOf(chainFromStorage({ ...stored, keepLocalKey: false }, { gemini: "R" }), "gemini"), ["R", "L"]);
+});
+
+test("a remote key equal to the local key is not tried twice; keyless providers appear once", () => {
+  const chain = chainFromStorage({ provider: "gemini", keys: { gemini: "L" } }, { gemini: "L" });
+  assert.equal(chain.filter((c) => c.provider === "gemini" && c.source === "remote").length, 0);
+  assert.equal(chain.filter((c) => c.provider === "pollinations").length, PROVIDERS.pollinations.models.length);
+});
+
+test("a working remote key is used when the local key for the same provider fails", async () => {
+  const chain = chainFromStorage({ provider: "groq", keys: { groq: "bad" } }, { groq: "good" });
+  const seen = [];
+  const fetchFn = async (url, init) => {
+    const auth = init.headers.Authorization;
+    seen.push(auth);
+    if (auth === "Bearer bad") return { status: 401, ok: false, json: async () => ({ error: { message: "Invalid API key" } }) };
+    return { status: 200, ok: true, json: async () => chatBody('{"answer":"B","reason":""}') };
+  };
+  assert.equal((await askChain("Q", chain, { fetchFn })).answer, "B");
+  assert.ok(seen.includes("Bearer good"));
+});
+
+test("a frozen local model is not frozen for the remote key of the same model", () => {
+  assert.notEqual(freezeKey({ provider: "gemini", model: "m" }), freezeKey({ provider: "gemini", model: "m", source: "remote" }));
+});
