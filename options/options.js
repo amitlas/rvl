@@ -108,6 +108,7 @@ async function renderFallbackOrder() {
   const { remoteKeys = {} } = await chrome.storage.session.get("remoteKeys");
   const chain = chainFromStorage(stored, remoteKeys);
   const rows = describeChain(chain);
+  const { rowResults = {} } = await chrome.storage.session.get("rowResults");
   const items = rows.map((r) => {
     const li = document.createElement("li");
     const label = document.createElement("span");
@@ -119,6 +120,11 @@ async function renderFallbackOrder() {
     button.textContent = "Test";
     const result = document.createElement("span");
     result.className = "rowResult";
+    const saved = rowResults[rowKey(r)];
+    if (saved) {
+      result.className = `rowResult ${saved.ok ? "ok" : "bad"}`;
+      result.textContent = ` ${saved.text}`;
+    }
     button.addEventListener("click", () => testRow(r, chain, result));
     li.append(label, " ", button, " ", result);
     return li;
@@ -126,19 +132,23 @@ async function renderFallbackOrder() {
   document.getElementById("fallbackOrder").replaceChildren(...items);
 }
 
+// Test results survive re-renders and reloads of this page, until Chrome closes.
+const rowKey = (row) => `${row.provider}/${row.source}`;
+
 async function testRow(row, chain, resultEl) {
   const question = document.getElementById("rowQuestion").value.trim() || TEST_QUESTION;
   const entries = chain.filter((c) => c.provider === row.provider && c.source === row.source);
   resultEl.className = "rowResult";
   resultEl.textContent = " ...";
+  let saved;
   try {
     const out = await askChain(question, entries);
-    resultEl.className = "rowResult ok";
-    resultEl.textContent = ` ${out.answer}${out.reason ? " - " + out.reason : ""}`;
+    saved = { ok: true, text: `${out.answer}${out.reason ? " - " + out.reason : ""}` };
   } catch (err) {
-    resultEl.className = "rowResult bad";
-    resultEl.textContent = ` ${err.message}`;
+    saved = { ok: false, text: err.message };
   }
+  const { rowResults = {} } = await chrome.storage.session.get("rowResults");
+  await chrome.storage.session.set({ rowResults: { ...rowResults, [rowKey(row)]: saved } });
 }
 
 renderFallbackOrder();
