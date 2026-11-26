@@ -11,6 +11,9 @@ import { cleanQuestion } from "./gemini.js";
 //   show(state)     -> Promise<void>     state is {kind: "loading"|"result"|"error", ...}
 //   openOptions()   -> void
 //   cancelled()     -> boolean           optional; true once the user hid the box, so a late answer is dropped
+// Prepended when the text came from the page, where several questions can be on screen.
+export const FIRST_ONLY = "Answer only the first multiple-choice question in the text below. Ignore every other question.\n\n";
+
 export async function handleRvl({ selectionText = "" } = {}, deps) {
   let selected = "";
   try {
@@ -21,15 +24,18 @@ export async function handleRvl({ selectionText = "" } = {}, deps) {
   // The page selection keeps line breaks between options; the context-menu
   // selectionText flattens them, so it is only the fallback.
   let text = selected || selectionText;
-  // Nothing selected: assume the page shows a single question and send all of it.
+  // Nothing selected: send what is on screen, and ask for the first question only.
+  let fromPage = false;
   if (!text.trim() && deps.readPage) {
     try {
       text = await deps.readPage();
+      fromPage = true;
     } catch {
       text = "";
     }
   }
-  const question = cleanQuestion(text);
+  const cleaned = cleanQuestion(text);
+  const question = fromPage && cleaned ? FIRST_ONLY + cleaned : cleaned;
   if (!question) {
     await deps.show({ kind: "error", text: "Select a question first" });
     return;

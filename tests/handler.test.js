@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { handleRvl, bareLabel } from "../src/handler.js";
+import { handleRvl, bareLabel, FIRST_ONLY } from "../src/handler.js";
 
 function fakeDeps(over = {}) {
   const shown = [];
@@ -43,7 +43,7 @@ test("falls back to selectionText when the page selection is empty or unreadable
 test("no selection falls back to the whole page text", async () => {
   const f = fakeDeps({ readSelection: async () => "  ", readPage: async () => "Page Q?\nA. x\nB. y" });
   await handleRvl({}, f.deps);
-  assert.equal(f.asked[0].q, "Page Q?\nA. x\nB. y");
+  assert.equal(f.asked[0].q, FIRST_ONLY + "Page Q?\nA. x\nB. y");
 });
 
 test("a selection means the page text is never read", async () => {
@@ -358,4 +358,17 @@ test("handleRvl passes the stated count from the question to the shown answer", 
     openOptions() {},
   });
   assert.equal(shown.at(-1).answer, "A, B, C");
+});
+
+test("page text (nothing selected) asks for the first question only", async () => {
+  const f = fakeDeps({ readSelection: async () => "", readPage: async () => "Q1?\nA. x\nB. y\nQ2?\nA. p\nB. q" });
+  await handleRvl({}, f.deps);
+  assert.ok(f.asked[0].q.startsWith(FIRST_ONLY));
+  assert.match(f.asked[0].q, /Q1\?/);
+});
+
+test("a selected question is sent without the first-only instruction", async () => {
+  const f = fakeDeps();
+  await handleRvl({}, f.deps);
+  assert.equal(f.asked[0].q.includes("first multiple-choice question"), false);
 });
