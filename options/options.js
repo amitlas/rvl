@@ -1,6 +1,6 @@
 import { PROVIDERS, fetchModels, modelOptions, askChain, chainFromStorage, TEST_QUESTION, TEST_EXPECTED } from "../src/providers.js";
 import { describeTestResult } from "../src/keytest.js";
-import { normalizeStored, withEdit, withProvider, toggleKeyVisibility } from "../src/options-state.js";
+import { normalizeStored, withEdit, withProvider, toggleKeyVisibility, describeChain } from "../src/options-state.js";
 
 const providerSelect = document.getElementById("provider");
 const apiKeyInput = document.getElementById("apiKey");
@@ -100,6 +100,27 @@ document.getElementById("toggleKey").addEventListener("click", (event) => {
 const keepLocalInput = document.getElementById("keepLocal");
 chrome.storage.local.get({ keepLocalKey: true }).then(({ keepLocalKey }) => { keepLocalInput.checked = keepLocalKey !== false; });
 keepLocalInput.addEventListener("change", () => chrome.storage.local.set({ keepLocalKey: keepLocalInput.checked }));
+
+// The fallback order as rvl will try it right now: provider, key source, and models.
+async function renderFallbackOrder() {
+  const stored = await chrome.storage.local.get(null);
+  const { remoteKeys = {} } = await chrome.storage.session.get("remoteKeys");
+  const rows = describeChain(chainFromStorage(stored, remoteKeys));
+  const items = rows.map((r) => {
+    const label = PROVIDERS[r.provider].label;
+    if (PROVIDERS[r.provider].keyless) return `${label}: free, no key (${r.models.length} models)`;
+    const source = r.source === "remote" ? "remote key" : "local key";
+    const tail = String(r.apiKey ?? "").slice(-4);
+    return `${label}: ${source} ...${tail} (${r.models.length} models)`;
+  });
+  document.getElementById("fallbackOrder").replaceChildren(...items.map((t) => {
+    const li = document.createElement("li");
+    li.textContent = t;
+    return li;
+  }));
+}
+renderFallbackOrder();
+chrome.storage.onChanged.addListener(() => renderFallbackOrder());
 allowMultipleInput.addEventListener("change", () => {
   stored = { ...stored, allowMultiple: allowMultipleInput.checked };
   persist();

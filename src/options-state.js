@@ -33,6 +33,21 @@ export function withProvider(stored, providerId) {
 }
 
 
+// Groups a fallback chain into the rows the options page shows: one row per
+// provider and key source, in the order rvl tries them.
+export function describeChain(chain = []) {
+  const rows = [];
+  for (const c of chain) {
+    const last = rows.at(-1);
+    if (last && last.provider === c.provider && last.source === c.source) {
+      last.models.push(c.model);
+      continue;
+    }
+    rows.push({ provider: c.provider, source: c.source, apiKey: c.apiKey, models: [c.model] });
+  }
+  return rows;
+}
+
 // The API key field flips between hidden (password) and full text.
 export function toggleKeyVisibility(type) {
   return type === "password" ? "text" : "password";

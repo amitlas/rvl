@@ -55,6 +55,9 @@
   <label><input id="keepLocal" type="checkbox" style="width:auto"> Keep my local keys (do not overwrite them with remote keys)</label>
   <div class="hint">On: a provider with a local key uses it first; a remote key for that provider is the fallback. Off: remote keys are tried first.</div>
 
+  <label>Fallback order (the order rvl tries them)</label>
+  <ol id="fallbackOrder"></ol>
+
   <button id="save">Save and test</button>
   <div id="status"></div>
 

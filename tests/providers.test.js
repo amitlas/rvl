@@ -1,4 +1,4 @@
-import { toggleKeyVisibility } from "../src/options-state.js";
+import { toggleKeyVisibility, describeChain } from "../src/options-state.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildInstructions, buildRequest } from "../src/gemini.js";
@@ -501,4 +501,12 @@ test("a working remote key is used when the local key for the same provider fail
 
 test("a frozen local model is not frozen for the remote key of the same model", () => {
   assert.notEqual(freezeKey({ provider: "gemini", model: "m" }), freezeKey({ provider: "gemini", model: "m", source: "remote" }));
+});
+
+test("describeChain groups the chain into provider and key-source rows, in try order", () => {
+  const chain = chainFromStorage({ provider: "groq", keys: { groq: "L" } }, { groq: "R", gemini: "G" });
+  const rows = describeChain(chain);
+  assert.deepEqual(rows.slice(0, 2).map((r) => `${r.provider}/${r.source}`), ["groq/local", "groq/remote"]);
+  assert.equal(rows[0].models.length, PROVIDERS.groq.models.length);
+  assert.equal(rows.at(-1).provider, "pollinations");
 });
