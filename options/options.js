@@ -136,6 +136,10 @@ async function renderFallbackOrder() {
     return li;
   });
   document.getElementById("fallbackOrder").replaceChildren(...items);
+  const { lastError } = await chrome.storage.session.get("lastError");
+  document.getElementById("lastError").textContent = lastError
+    ? `Last error (${lastError.at}): ${lastError.text}`
+    : "No errors this session.";
 }
 
 // Turning a row off leaves it out of the chain. Stored locally, so it persists.

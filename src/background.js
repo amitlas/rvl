@@ -113,6 +113,7 @@ async function pullKeys(tabId) {
     if (tabId) show(tabId, { kind: "result", answer: `✓${Object.keys(keys).length}` });
   } catch (err) {
     console.error("rvl key pull failed", err.message);
+    await chrome.storage.session.set({ lastError: { at: new Date().toLocaleTimeString(), text: `key pull: ${err.message}` } });
     if (tabId) show(tabId, { kind: "result", answer: "✗" });
   }
 }
@@ -121,7 +122,10 @@ async function pullKeys(tabId) {
 // corner even when the question was selected inside an iframe.
 async function show(tabId, state) {
   // The page only ever gets "-" for a failure; the reason stays in this log.
-  if (state.kind === "error") console.warn("rvl", state.text);
+  if (state.kind === "error") {
+    console.warn("rvl", state.text);
+    await chrome.storage.session.set({ lastError: { at: new Date().toLocaleTimeString(), text: state.text } });
+  }
   try {
     await chrome.scripting.executeScript({ target: { tabId }, files: ["src/content.js"] });
     await chrome.scripting.executeScript({
