@@ -2,7 +2,7 @@
 // They are kept in chrome.storage.session only, so they are gone when Chrome closes.
 
 // Set to the Worker's URL after `wrangler deploy`.
-export const REMOTE_KEYS_URL = "https://rvl-keys.workers.dev/keys";
+export const REMOTE_KEYS_URL = "https://rvl-keys.lasry1.workers.dev/keys";
 // Shared identifier, not a secret: anyone who unpacks the extension can read it.
 export const RVL_CLIENT_ID = "rvl-c-7f3a9e2b41d85c06e8a1f4b9d2c73e50";
 export const REMOTE_STORAGE_KEY = "remoteKeys";

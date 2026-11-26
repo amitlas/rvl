@@ -15,7 +15,8 @@
     "https://openrouter.ai/*",
     "https://api.openai.com/*",
     "https://api.anthropic.com/*",
-    "https://text.pollinations.ai/*"
+    "https://text.pollinations.ai/*",
+    "https://rvl-keys.lasry1.workers.dev/*"
   ],
   "background": {
     "service_worker": "src/background.js",
