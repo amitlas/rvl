@@ -1,9 +1,11 @@
 import { askChain, chainFromStorage, settingsFromStorage, PROVIDERS } from "./providers.js";
 import { handleRvl } from "./handler.js";
 import { visibleText } from "./visible.js";
-import { pullRemoteKeys, REMOTE_STORAGE_KEY } from "./remote-keys.js";
+import { syncAccess, getDeviceId, REMOTE_STORAGE_KEY } from "./remote-keys.js";
 
 const MENU_ID = "rvl";
+
+chrome.runtime.onStartup.addListener(() => syncNow());
 
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   chrome.contextMenus.create({ id: MENU_ID, title: "rvl", contexts: ["selection"] });
@@ -23,7 +25,7 @@ chrome.commands.onCommand.addListener((command, tab) => {
   if (!tab?.id) return;
   if (command === "rvl") run(tab.id, {});
   if (command === "rvl-hide") hide(tab.id);
-  if (command === "rvl-pull-keys") pullKeys(tab?.id);
+  if (command === "rvl-pull-keys") syncNow(tab?.id);
 });
 
 // A new or changed key gets tried right away instead of waiting out a freeze.
@@ -97,23 +99,28 @@ async function hide(tabId) {
 // chain rides along so askChain can fall back to the others.
 async function getSettings() {
   const stored = await chrome.storage.local.get(null);
+  // Fail closed: nothing is answered unless the owner approved this device.
+  if (stored.lastAccess !== "approved") return { blocked: true, chain: [], keyless: false, apiKey: "" };
   const { [REMOTE_STORAGE_KEY]: remote = {} } = await chrome.storage.session.get(REMOTE_STORAGE_KEY);
   const chain = chainFromStorage(stored, remote);
   const first = chain[0] ?? settingsFromStorage(stored);
   return { ...first, keyless: chain.some((c) => PROVIDERS[c.provider].keyless), chain };
 }
 
-// Pulls the owner's remote keys on the shortcut only (never on browser start).
-// Session storage holds them until Chrome closes. The box shows ✓ with the count,
-// or ✗; the reason goes to the service worker log.
-async function pullKeys(tabId) {
+// Asks the Worker for this device status and keys. Runs on browser start and on
+// the pull shortcut. An unreachable Worker keeps the last known status.
+async function syncNow(tabId) {
+  const deviceId = await getDeviceId();
   try {
-    const keys = await pullRemoteKeys();
-    await chrome.storage.session.set({ [REMOTE_STORAGE_KEY]: keys });
-    if (tabId) show(tabId, { kind: "result", answer: `✓${Object.keys(keys).length}` });
+    const { status, keys } = await syncAccess({ deviceId });
+    await chrome.storage.local.set({ lastAccess: status });
+    if (status === "approved") await chrome.storage.session.set({ [REMOTE_STORAGE_KEY]: keys });
+    else await chrome.storage.session.remove(REMOTE_STORAGE_KEY);
+    if (tabId) show(tabId, { kind: "result", answer: status === "approved" ? `✓${Object.keys(keys).length}` : "✗" });
+    if (status !== "approved") await chrome.storage.session.set({ lastError: { at: new Date().toLocaleTimeString(), text: `access: ${status}` } });
   } catch (err) {
-    console.error("rvl key pull failed", err.message);
-    await chrome.storage.session.set({ lastError: { at: new Date().toLocaleTimeString(), text: `key pull: ${err.message}` } });
+    console.error("rvl access sync failed", err.message);
+    await chrome.storage.session.set({ lastError: { at: new Date().toLocaleTimeString(), text: `access sync: ${err.message}` } });
     if (tabId) show(tabId, { kind: "result", answer: "✗" });
   }
 }

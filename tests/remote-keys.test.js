@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pullRemoteKeys } from "../src/remote-keys.js";
+import { syncAccess, getDeviceId } from "../src/remote-keys.js";
 import worker from "../worker/index.js";
 import { Registry, validateRegistration, LIMITS } from "../worker/registry.js";
 
@@ -10,20 +10,32 @@ const reply = (status, body) => ({
   json: async () => body,
 });
 
-test("pullRemoteKeys returns the non-empty keys and sends the client id", async () => {
+test("syncAccess sends the device id and returns keys when approved", async () => {
   let sent;
-  const fetchFn = async (url, init) => { sent = { url, init }; return reply(200, { keys: { gemini: " g ", groq: "" } }); };
-  const keys = await pullRemoteKeys({ fetchFn, url: "https://x/keys", clientId: "id-1" });
-  assert.deepEqual(keys, { gemini: "g" });
-  assert.equal(sent.init.headers["X-Client-Id"], "id-1");
+  const fetchFn = async (url, init) => { sent = { url, init }; return reply(200, { status: "approved", keys: { gemini: " g ", groq: "" } }); };
+  const out = await syncAccess({ fetchFn, url: "https://x", deviceId: "d1" });
+  assert.deepEqual(out, { status: "approved", keys: { gemini: "g" } });
+  assert.equal(sent.init.headers["X-Device-Id"], "d1");
 });
 
-test("pullRemoteKeys reports rejected id, server error, bad body, empty and network failure", async () => {
-  await assert.rejects(pullRemoteKeys({ fetchFn: async () => reply(403, {}) }), /client id rejected/);
-  await assert.rejects(pullRemoteKeys({ fetchFn: async () => reply(500, {}) }), /server error 500/);
-  await assert.rejects(pullRemoteKeys({ fetchFn: async () => ({ status: 200, ok: true, json: async () => { throw new Error("x"); } }) }), /bad response/);
-  await assert.rejects(pullRemoteKeys({ fetchFn: async () => reply(200, { keys: {} }) }), /no keys on server/);
-  await assert.rejects(pullRemoteKeys({ fetchFn: async () => { throw new Error("offline"); } }), /network error/);
+test("syncAccess registers an unknown device and reports pending", async () => {
+  const calls = [];
+  const fetchFn = async (url) => { calls.push(url); return url.endsWith("/keys") ? reply(403, { status: "unknown" }) : reply(200, { status: "pending" }); };
+  assert.deepEqual(await syncAccess({ fetchFn, url: "https://x", deviceId: "d1" }), { status: "pending", keys: {} });
+  assert.ok(calls.some((u) => u.endsWith("/register")));
+});
+
+test("syncAccess reports revoked, and throws on network failure", async () => {
+  assert.deepEqual(await syncAccess({ fetchFn: async () => reply(403, { status: "revoked" }), url: "https://x", deviceId: "d1" }), { status: "revoked", keys: {} });
+  await assert.rejects(syncAccess({ fetchFn: async () => { throw new Error("offline"); }, url: "https://x", deviceId: "d1" }), /network error/);
+});
+
+test("getDeviceId creates one id and keeps it", async () => {
+  const store = {};
+  const storage = { get: async (k) => ({ [k]: store[k] }), set: async (o) => Object.assign(store, o) };
+  const a = await getDeviceId(storage);
+  assert.equal(await getDeviceId(storage), a);
+  assert.match(a, /^[a-f0-9]{32}$/);
 });
 
 function fakeState() {

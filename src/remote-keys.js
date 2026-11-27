@@ -1,33 +1,47 @@
-// Keys pulled from the rvl-keys Worker when the owner presses the pull shortcut.
-// They are kept in chrome.storage.session only, so they are gone when Chrome closes.
+// Keys come from the rvl-keys Worker. Each install has a random device id; the
+// owner approves it there. Keys live in chrome.storage.session only.
 
-// Set to the Worker's URL after `wrangler deploy`.
-export const REMOTE_KEYS_URL = "https://rvl-keys.lasry1.workers.dev/keys";
-// Shared identifier, not a secret: anyone who unpacks the extension can read it.
-export const RVL_CLIENT_ID = "rvl-c-7f3a9e2b41d85c06e8a1f4b9d2c73e50";
+export const REMOTE_KEYS_URL = "https://rvl-keys.lasry1.workers.dev";
 export const REMOTE_STORAGE_KEY = "remoteKeys";
+const DEVICE_KEY = "deviceId";
 
-// Returns {provider: key} from the Worker. Throws an Error with a short reason
-// on any failure; the caller decides what the user sees.
-export async function pullRemoteKeys({ fetchFn = fetch, url = REMOTE_KEYS_URL, clientId = RVL_CLIENT_ID } = {}) {
+// One random id per install, kept in chrome.storage.local.
+export async function getDeviceId(storage = chrome.storage.local) {
+  const { [DEVICE_KEY]: existing } = await storage.get(DEVICE_KEY);
+  if (existing) return existing;
+  const id = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  await storage.set({ [DEVICE_KEY]: id });
+  return id;
+}
+
+const cleanKeys = (keys = {}) => {
+  const out = {};
+  for (const [id, key] of Object.entries(keys)) {
+    if (typeof key === "string" && key.trim()) out[id] = key.trim();
+  }
+  return out;
+};
+
+// Asks the Worker for this device's status. Returns {status, keys}; keys are
+// present only when approved. An unknown device is registered and reported as
+// pending. Throws only when the Worker cannot be reached or answers unexpectedly.
+export async function syncAccess({ fetchFn = fetch, url = REMOTE_KEYS_URL, deviceId, name = "rvl" } = {}) {
   let res;
   try {
-    res = await fetchFn(url, { headers: { "X-Client-Id": clientId } });
+    res = await fetchFn(`${url}/keys`, { headers: { "X-Device-Id": deviceId } });
   } catch {
     throw new Error("network error");
   }
-  if (res.status === 401 || res.status === 403) throw new Error("client id rejected");
-  if (!res.ok) throw new Error(`server error ${res.status}`);
-  let body;
-  try {
-    body = await res.json();
-  } catch {
-    throw new Error("bad response");
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 200 && body.status === "approved") return { status: "approved", keys: cleanKeys(body.keys) };
+  if (res.status === 403 && body.status === "unknown") {
+    await fetchFn(`${url}/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ deviceId, name }),
+    }).catch(() => {});
+    return { status: "pending", keys: {} };
   }
-  const keys = {};
-  for (const [id, key] of Object.entries(body?.keys ?? {})) {
-    if (typeof key === "string" && key.trim()) keys[id] = key.trim();
-  }
-  if (Object.keys(keys).length === 0) throw new Error("no keys on server");
-  return keys;
+  if (res.status === 403 && body.status) return { status: body.status, keys: {} };
+  throw new Error(`server error ${res.status}`);
 }

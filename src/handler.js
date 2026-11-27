@@ -42,6 +42,10 @@ export async function handleRvl({ selectionText = "" } = {}, deps) {
   }
 
   const settings = await deps.getSettings();
+  if (settings.blocked) {
+    await deps.show({ kind: "error", text: "No access: ask the owner" });
+    return;
+  }
   // A keyless provider (Pollinations) means there is always something to try.
   if (!settings.apiKey && !settings.keyless) {
     await deps.show({ kind: "error", text: "Set your API key in the rvl options" });
