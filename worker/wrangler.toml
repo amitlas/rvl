@@ -2,6 +2,10 @@ name = "rvl-keys"
 main = "index.js"
 compatibility_date = "2026-01-01"
 
-# Shared client id, not a secret: the extension carries the same value (src/remote-keys.js).
-[vars]
-RVL_CLIENT_ID = "rvl-c-7f3a9e2b41d85c06e8a1f4b9d2c73e50"
+[[durable_objects.bindings]]
+name = "REGISTRY"
+class_name = "Registry"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["Registry"]
