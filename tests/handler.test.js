@@ -376,5 +376,5 @@ test("blocked settings answer nothing and say there is no access", async () => {
   const f = fakeDeps({ getSettings: async () => ({ blocked: true, chain: [], keyless: false, apiKey: "" }) });
   await handleRvl({}, f.deps);
   assert.equal(f.asked.length, 0);
-  assert.equal(f.shown.at(-1).kind, "error");
+  assert.deepEqual(f.shown.at(-1), { kind: "result", answer: "✗" });
 });

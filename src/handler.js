@@ -43,7 +43,7 @@ export async function handleRvl({ selectionText = "" } = {}, deps) {
 
   const settings = await deps.getSettings();
   if (settings.blocked) {
-    await deps.show({ kind: "error", text: "No access: ask the owner" });
+    await deps.show({ kind: "result", answer: "✗" });
     return;
   }
   // A keyless provider (Pollinations) means there is always something to try.
