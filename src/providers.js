@@ -135,11 +135,13 @@ export function chainFromStorage(stored = {}, remote = {}) {
   const order = [primary.provider, ...Object.keys(PROVIDERS).filter((id) => id !== primary.provider)];
   const chain = [];
   for (const id of order) {
-    const sources = keepLocal
-      ? [["local", keys[id]], ["remote", remote[id]]]
-      : [["remote", remote[id]], ["local", keys[id]]];
+    // Remote keys come as a list per provider; the first is "remote", the rest "remote2", "remote3"...
+    const remoteList = [remote[id]].flat().filter((k) => typeof k === "string" && k.trim());
+    const remoteSources = remoteList.map((apiKey, i) => [i === 0 ? "remote" : "remote" + (i + 1), apiKey]);
+    const local = ["local", keys[id]];
+    const sources = keepLocal ? [local, ...remoteSources] : [...remoteSources, local];
     for (const [source, apiKey] of sources) {
-      if (source === "remote" && (apiKey === keys[id] || PROVIDERS[id].keyless)) continue;
+      if (source !== "local" && (apiKey === keys[id] || PROVIDERS[id].keyless)) continue;
       const first = resolveSettings({
         provider: id,
         apiKey,
@@ -166,7 +168,7 @@ function failsWholeProvider(message) {
 // A keyed model that reports "out of quota or credit" is left alone for this long:
 // later questions skip it without asking, so they do not pay for the refusal.
 export const FREEZE_MS = 60 * 60 * 1000;
-export const freezeKey = ({ provider, model, source = "local" }) => `${provider}/${model}${source === "remote" ? "#remote" : ""}`;
+export const freezeKey = ({ provider, model, source = "local" }) => `${provider}/${model}${source === "local" ? "" : "#" + source}`;
 
 // Tries each provider in turn; any failure (quota, bad key, network, outage)
 // moves on to the next. Only when all fail is an error thrown.

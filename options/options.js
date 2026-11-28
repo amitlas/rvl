@@ -116,7 +116,7 @@ async function renderFallbackOrder() {
     const label = document.createElement("span");
     const tail = String(r.apiKey ?? "").slice(-4);
     if (PROVIDERS[r.provider].keyless) label.textContent = `${PROVIDERS[r.provider].label}: free, no key`;
-    else label.textContent = `${PROVIDERS[r.provider].label}: ${r.source === "remote" ? "remote key" : "local key"} ...${tail}`;
+    else label.textContent = `${PROVIDERS[r.provider].label}: ${r.source === "local" ? "local key" : "remote key"} ...${tail}`;
     const enabled = document.createElement("input");
     enabled.type = "checkbox";
     enabled.style.width = "auto";

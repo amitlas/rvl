@@ -12,7 +12,7 @@ test("syncAccess sends the device id and returns keys when approved", async () =
   let sent;
   const fetchFn = async (url, init) => { sent = { url, init }; return reply(200, { status: "approved", keys: { gemini: " g ", groq: "" } }); };
   const out = await syncAccess({ fetchFn, url: "https://x", deviceId: "d1" });
-  assert.deepEqual(out, { status: "approved", keys: { gemini: "g" } });
+  assert.deepEqual(out, { status: "approved", keys: { gemini: ["g"] } });
   assert.equal(sent.init.headers["X-Device-Id"], "d1");
 });
 
@@ -74,9 +74,9 @@ test("pullKeys fills session keys only when approved", async () => {
   };
   const local = mem();
   const session = mem();
-  const out = await pullKeys({ fetchFn: async () => reply(200, { status: "approved", keys: { gemini: "g" } }), local, session, url: "https://x" });
+  const out = await pullKeys({ fetchFn: async () => reply(200, { status: "approved", keys: { gemini: ["g"] } }), local, session, url: "https://x" });
   assert.deepEqual(out, { status: "approved", count: 1 });
-  assert.deepEqual(session.m.remoteKeys, { gemini: "g" });
+  assert.deepEqual(session.m.remoteKeys, { gemini: ["g"] });
   await pullKeys({ fetchFn: async () => reply(403, { status: "pending" }), local, session, url: "https://x" });
   assert.equal(session.m.remoteKeys, undefined);
 });

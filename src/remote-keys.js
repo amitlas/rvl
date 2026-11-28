@@ -14,10 +14,12 @@ export async function getDeviceId(storage = chrome.storage.local) {
   return id;
 }
 
+// Each provider maps to a list of keys. A single string is accepted too, as one key.
 const cleanKeys = (keys = {}) => {
   const out = {};
-  for (const [id, key] of Object.entries(keys)) {
-    if (typeof key === "string" && key.trim()) out[id] = key.trim();
+  for (const [id, value] of Object.entries(keys)) {
+    const list = [value].flat().filter((k) => typeof k === "string" && k.trim()).map((k) => k.trim());
+    if (list.length) out[id] = list;
   }
   return out;
 };
