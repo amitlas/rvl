@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { syncAccess, getDeviceId, refreshAccess } from "../src/remote-keys.js";
+import { syncAccess, getDeviceId, checkAccess, pullKeys } from "../src/remote-keys.js";
 import worker from "../worker/index.js";
 import { Registry, validateRegistration, validateDeviceKey, LIMITS } from "../worker/registry.js";
 
@@ -155,18 +155,48 @@ test("admin setkey refuses without the admin key", async () => {
   assert.equal(res.status, 403);
 });
 
-test("refreshAccess stores the status, and keys only when approved", async () => {
+test("checkAccess stores the status and never asks for keys", async () => {
   const mem = () => {
     const m = {};
     return { m, get: async (k) => ({ [k]: m[k] }), set: async (o) => Object.assign(m, o), remove: async (k) => { delete m[k]; } };
   };
   const local = mem();
   const session = mem();
-  const approved = async () => reply(200, { status: "approved", keys: { gemini: "g" } });
-  assert.deepEqual(await refreshAccess({ fetchFn: approved, local, session, url: "https://x" }), { status: "approved", count: 1 });
+  session.m.remoteKeys = { gemini: "old" };
+  const urls = [];
+  const fetchFn = async (url) => { urls.push(url); return reply(200, { status: "approved" }); };
+  assert.deepEqual(await checkAccess({ fetchFn, local, session, url: "https://x" }), { status: "approved" });
   assert.equal(local.m.lastAccess, "approved");
-  assert.deepEqual(session.m.remoteKeys, { gemini: "g" });
-  await refreshAccess({ fetchFn: async () => reply(403, { status: "revoked" }), local, session, url: "https://x" });
+  assert.ok(urls.every((u) => u.endsWith("/status")));
+  assert.deepEqual(session.m.remoteKeys, { gemini: "old" });
+  await checkAccess({ fetchFn: async () => reply(200, { status: "revoked" }), local, session, url: "https://x" });
   assert.equal(local.m.lastAccess, "revoked");
   assert.equal(session.m.remoteKeys, undefined);
+});
+
+test("pullKeys fills session keys only when approved", async () => {
+  const mem = () => {
+    const m = {};
+    return { m, get: async (k) => ({ [k]: m[k] }), set: async (o) => Object.assign(m, o), remove: async (k) => { delete m[k]; } };
+  };
+  const local = mem();
+  const session = mem();
+  const out = await pullKeys({ fetchFn: async () => reply(200, { status: "approved", keys: { gemini: "g" } }), local, session, url: "https://x" });
+  assert.deepEqual(out, { status: "approved", count: 1 });
+  assert.deepEqual(session.m.remoteKeys, { gemini: "g" });
+  await pullKeys({ fetchFn: async () => reply(403, { status: "pending" }), local, session, url: "https://x" });
+  assert.equal(session.m.remoteKeys, undefined);
+});
+
+test("the status endpoint never returns keys, even for an approved device", async () => {
+  const reg = new Registry(fakeState());
+  const env = {
+    RVL_GEMINI_KEY: "g", RVL_ADMIN_KEY: "adm",
+    REGISTRY: { idFromName: (n) => n, get: () => ({ fetch: (req) => reg.fetch(req) }) },
+  };
+  await worker.fetch(new Request("https://w/register", { method: "POST", body: JSON.stringify({ deviceId: DEV, name: "Dani", ip: "1.1.1.1" }) }), env);
+  await worker.fetch(new Request("https://w/admin/approve", { method: "POST", headers: { "X-Admin-Key": "adm" }, body: JSON.stringify({ deviceId: DEV }) }), env);
+  const res = await worker.fetch(new Request("https://w/status", { headers: { "X-Device-Id": DEV } }), env);
+  const body = await res.json();
+  assert.deepEqual(body, { status: "approved" });
 });

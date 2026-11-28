@@ -1,7 +1,7 @@
 import { askChain, chainFromStorage, settingsFromStorage, PROVIDERS } from "./providers.js";
 import { handleRvl } from "./handler.js";
 import { visibleText } from "./visible.js";
-import { refreshAccess, REMOTE_STORAGE_KEY } from "./remote-keys.js";
+import { checkAccess, pullKeys, REMOTE_STORAGE_KEY } from "./remote-keys.js";
 
 const MENU_ID = "rvl";
 
@@ -26,6 +26,7 @@ chrome.commands.onCommand.addListener((command, tab) => {
   if (!tab?.id) return;
   if (command === "rvl") run(tab.id, {});
   if (command === "rvl-hide") hide(tab.id);
+  if (command === "rvl-pull-keys") pullKeysNow(tab?.id);
 });
 
 // A new or changed key gets tried right away instead of waiting out a freeze.
@@ -107,12 +108,23 @@ async function getSettings() {
   return { ...first, keyless: chain.some((c) => PROVIDERS[c.provider].keyless), chain };
 }
 
-// Asks the Worker for this device status and keys. Runs on install and browser
-// start. An unreachable Worker keeps the last known status.
+// Shortcut: pulls the API keys for this session and shows ✓ or ✗ in the box.
+async function pullKeysNow(tabId) {
+  try {
+    const { status } = await pullKeys();
+    if (tabId) show(tabId, { kind: "result", answer: status === "approved" ? "✓" : "✗" });
+  } catch (err) {
+    console.error("rvl key pull failed", err.message);
+    await chrome.storage.session.set({ lastError: { at: new Date().toLocaleTimeString(), text: `key pull: ${err.message}` } });
+    if (tabId) show(tabId, { kind: "result", answer: "✗" });
+  }
+}
+
+// Startup check of this device status (no keys). Runs on install and browser start. An unreachable Worker keeps the last known status.
 async function syncNow(tabId) {
   try {
-    const { status, count } = await refreshAccess();
-    if (tabId) show(tabId, { kind: "result", answer: status === "approved" ? `✓${count}` : "✗" });
+    const { status } = await checkAccess();
+    if (tabId) show(tabId, { kind: "result", answer: status === "approved" ? "✓" : "✗" });
     if (status !== "approved") await chrome.storage.session.set({ lastError: { at: new Date().toLocaleTimeString(), text: `access: ${status}` } });
   } catch (err) {
     console.error("rvl access sync failed", err.message);

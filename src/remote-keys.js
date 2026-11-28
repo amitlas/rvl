@@ -46,10 +46,32 @@ export async function syncAccess({ fetchFn = fetch, url = REMOTE_KEYS_URL, devic
   throw new Error(`server error ${res.status}`);
 }
 
-// Asks the Worker and stores the result: the status in local storage, and the
-// keys (only when approved) in session storage. Used on install, on startup,
-// and by the "Check access now" button.
-export async function refreshAccess({ fetchFn = fetch, local = chrome.storage.local, session = chrome.storage.session, url = REMOTE_KEYS_URL } = {}) {
+// Startup check: asks only for this device status (no keys). Stores the status
+// in local storage. Keys already in session are dropped unless the device is approved.
+export async function checkAccess({ fetchFn = fetch, local = chrome.storage.local, session = chrome.storage.session, url = REMOTE_KEYS_URL } = {}) {
+  const deviceId = await getDeviceId(local);
+  let res;
+  try {
+    res = await fetchFn(`${url}/status`, { headers: { "X-Device-Id": deviceId } });
+  } catch {
+    throw new Error("network error");
+  }
+  const body = await res.json().catch(() => ({}));
+  if (res.status !== 200 || !body.status) throw new Error(`server error ${res.status}`);
+  if (body.status === "unknown") {
+    await fetchFn(`${url}/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ deviceId, name: "rvl" }),
+    }).catch(() => {});
+  }
+  await local.set({ lastAccess: body.status });
+  if (body.status !== "approved") await session.remove(REMOTE_STORAGE_KEY);
+  return { status: body.status };
+}
+
+// Button: fetches the API keys for this device (approved only) into session storage.
+export async function pullKeys({ fetchFn = fetch, local = chrome.storage.local, session = chrome.storage.session, url = REMOTE_KEYS_URL } = {}) {
   const deviceId = await getDeviceId(local);
   const { status, keys } = await syncAccess({ fetchFn, url, deviceId });
   await local.set({ lastAccess: status });

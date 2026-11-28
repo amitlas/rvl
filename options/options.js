@@ -1,7 +1,7 @@
 import { PROVIDERS, fetchModels, modelOptions, askChain, chainFromStorage, TEST_QUESTION, TEST_EXPECTED } from "../src/providers.js";
 import { describeTestResult } from "../src/keytest.js";
 import { normalizeStored, withEdit, withProvider, toggleKeyVisibility, describeChain } from "../src/options-state.js";
-import { refreshAccess, getDeviceId } from "../src/remote-keys.js";
+import { checkAccess, pullKeys, getDeviceId } from "../src/remote-keys.js";
 
 const providerSelect = document.getElementById("provider");
 const apiKeyInput = document.getElementById("apiKey");
@@ -208,8 +208,18 @@ document.getElementById("checkAccess").addEventListener("click", async () => {
   const out = document.getElementById("accessResult");
   out.textContent = "checking...";
   try {
-    const { status, count } = await refreshAccess();
-    out.textContent = status === "approved" ? `Approved: ${count} keys` : `Status: ${status}`;
+    const { status } = await checkAccess();
+    out.textContent = `Status: ${status}`;
+  } catch (err) {
+    out.textContent = `Could not reach the server: ${err.message}`;
+  }
+});
+document.getElementById("pullKeys").addEventListener("click", async () => {
+  const out = document.getElementById("accessResult");
+  out.textContent = "pulling...";
+  try {
+    const { status, count } = await pullKeys();
+    out.textContent = status === "approved" ? `Pulled ${count} keys` : `Status: ${status}, no keys`;
   } catch (err) {
     out.textContent = `Could not reach the server: ${err.message}`;
   }
@@ -217,7 +227,7 @@ document.getElementById("checkAccess").addEventListener("click", async () => {
 
 // Chrome owns the shortcut setting; the page only shows it and links to it.
 chrome.commands.getAll().then((commands) => {
-  for (const name of ["rvl", "rvl-hide"]) {
+  for (const name of ["rvl", "rvl-hide", "rvl-pull-keys"]) {
     const shortcut = commands.find((c) => c.name === name)?.shortcut;
     document.getElementById(`shortcut-${name}`).textContent = shortcut || "not set";
   }

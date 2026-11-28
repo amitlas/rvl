@@ -36,6 +36,13 @@
         "mac": "MacCtrl+X"
       },
       "description": "Hide the box (stops a pending answer)"
+    },
+    "rvl-pull-keys": {
+      "suggested_key": {
+        "default": "Alt+Shift+K",
+        "mac": "MacCtrl+Shift+K"
+      },
+      "description": "Pull the API keys for this browser session"
     }
   },
   "action": {

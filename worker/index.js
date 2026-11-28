@@ -62,6 +62,13 @@ export default {
       return ask(env, "/register", { deviceId: body.deviceId, name: body.name.trim(), ip });
     }
 
+    // Status only, no keys: used by the startup check.
+    if (request.method === "GET" && url.pathname === "/status") {
+      const deviceId = request.headers.get("X-Device-Id") ?? "";
+      const { status } = await (await ask(env, "/status", { deviceId })).json();
+      return json({ status });
+    }
+
     if (request.method === "GET" && url.pathname === "/keys") {
       const deviceId = request.headers.get("X-Device-Id") ?? "";
       const { status, deviceKeys = {} } = await (await ask(env, "/status", { deviceId })).json();
