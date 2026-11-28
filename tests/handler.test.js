@@ -99,11 +99,10 @@ test("manifest binds the rvl command to Ctrl+Z on Mac and Windows", async () => 
   assert.deepEqual(manifest.commands.rvl.suggested_key, { default: "Ctrl+Z", mac: "MacCtrl+Z" });
 });
 
-test("manifest has a toolbar action and an options page so settings are reachable", async () => {
+test("manifest has no toolbar action (so Chrome offers no Activate shortcut) and keeps the options page", async () => {
   const { readFile } = await import("node:fs/promises");
   const manifest = JSON.parse(await readFile(new URL("../manifest.json", import.meta.url), "utf8"));
-  assert.ok(manifest.action, "toolbar action missing");
-  assert.equal(manifest.action.default_popup, undefined, "a popup would swallow the icon click");
+  assert.equal(manifest.action, undefined, "a toolbar action makes Chrome offer an Activate shortcut");
   assert.equal(manifest.options_page, "options/options.html");
 });
 
