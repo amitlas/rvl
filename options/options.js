@@ -230,6 +230,7 @@ chrome.commands.getAll().then((commands) => {
   for (const name of ["rvl", "rvl-hide", "rvl-pull-keys"]) {
     const shortcut = commands.find((c) => c.name === name)?.shortcut;
     document.getElementById(`shortcut-${name}`).textContent = shortcut || "not set";
+    if (name === "rvl-pull-keys") document.getElementById("pullShortcut").textContent = shortcut || "not set";
   }
 });
 
