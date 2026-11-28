@@ -1,4 +1,4 @@
-// Keys come from the rvl-keys Worker. Each install has a random device id; the
+// Keys come from the rvl service on unishit-worker. Each install has a random device id; the
 // owner approves it there. Keys live in chrome.storage.session only.
 
 export const REMOTE_KEYS_URL = "https://unishit-worker.lasry1.workers.dev/rvl";
