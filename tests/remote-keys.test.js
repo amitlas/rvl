@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { syncAccess, getDeviceId } from "../src/remote-keys.js";
+import { syncAccess, getDeviceId, refreshAccess } from "../src/remote-keys.js";
 import worker from "../worker/index.js";
 import { Registry, validateRegistration, validateDeviceKey, LIMITS } from "../worker/registry.js";
 
@@ -153,4 +153,20 @@ test("admin setkey refuses without the admin key", async () => {
   const env = { RVL_ADMIN_KEY: "adm", REGISTRY: { idFromName: (n) => n, get: () => ({ fetch: async () => new Response("{}") }) } };
   const res = await worker.fetch(new Request("https://w/admin/setkey", { method: "POST", body: JSON.stringify({ deviceId: DEV, provider: "gemini", key: "AIzaSyDUMMYKEY1234" }) }), env);
   assert.equal(res.status, 403);
+});
+
+test("refreshAccess stores the status, and keys only when approved", async () => {
+  const mem = () => {
+    const m = {};
+    return { m, get: async (k) => ({ [k]: m[k] }), set: async (o) => Object.assign(m, o), remove: async (k) => { delete m[k]; } };
+  };
+  const local = mem();
+  const session = mem();
+  const approved = async () => reply(200, { status: "approved", keys: { gemini: "g" } });
+  assert.deepEqual(await refreshAccess({ fetchFn: approved, local, session, url: "https://x" }), { status: "approved", count: 1 });
+  assert.equal(local.m.lastAccess, "approved");
+  assert.deepEqual(session.m.remoteKeys, { gemini: "g" });
+  await refreshAccess({ fetchFn: async () => reply(403, { status: "revoked" }), local, session, url: "https://x" });
+  assert.equal(local.m.lastAccess, "revoked");
+  assert.equal(session.m.remoteKeys, undefined);
 });

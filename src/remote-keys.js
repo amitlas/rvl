@@ -45,3 +45,15 @@ export async function syncAccess({ fetchFn = fetch, url = REMOTE_KEYS_URL, devic
   if (res.status === 403 && body.status) return { status: body.status, keys: {} };
   throw new Error(`server error ${res.status}`);
 }
+
+// Asks the Worker and stores the result: the status in local storage, and the
+// keys (only when approved) in session storage. Used on install, on startup,
+// and by the "Check access now" button.
+export async function refreshAccess({ fetchFn = fetch, local = chrome.storage.local, session = chrome.storage.session, url = REMOTE_KEYS_URL } = {}) {
+  const deviceId = await getDeviceId(local);
+  const { status, keys } = await syncAccess({ fetchFn, url, deviceId });
+  await local.set({ lastAccess: status });
+  if (status === "approved") await session.set({ [REMOTE_STORAGE_KEY]: keys });
+  else await session.remove(REMOTE_STORAGE_KEY);
+  return { status, count: Object.keys(keys).length };
+}

@@ -30,13 +30,6 @@
       },
       "description": "Reveal the answer to the selected question"
     },
-    "rvl-pull-keys": {
-      "suggested_key": {
-        "default": "Alt+Shift+K",
-        "mac": "MacCtrl+Shift+K"
-      },
-      "description": "Pull the remote API keys for this browser session"
-    },
     "rvl-hide": {
       "suggested_key": {
         "default": "Alt+X",

@@ -26,7 +26,6 @@
   <label>Keyboard shortcuts</label>
   <div>Reveal answer: <b id="shortcut-rvl">...</b></div>
   <div>Hide box: <b id="shortcut-rvl-hide">...</b></div>
-  <div>Pull remote keys (this session): <b id="shortcut-rvl-pull-keys">...</b></div>
   <button id="changeShortcut" type="button">Change shortcuts</button>
   <div class="hint">Chrome stores these, so changes are made on its shortcuts page. Chrome rejects Cmd+Option combinations; use a modifier plus a letter, digit, period or comma.</div>
 
@@ -56,6 +55,11 @@
 
   <label><input id="keepLocal" type="checkbox" style="width:auto"> Keep my local keys (do not overwrite them with remote keys)</label>
   <div class="hint">On: a provider with a local key uses it first; a remote key for that provider is the fallback. Off: remote keys are tried first.</div>
+
+  <label>Device</label>
+  <div>Device ID: <code id="deviceId">...</code></div>
+  <button id="checkAccess" type="button">Check access now</button>
+  <div id="accessResult" class="hint"></div>
 
   <label>Fallback order (the order rvl tries them)</label>
   <div id="lastError" class="hint"></div>
