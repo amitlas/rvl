@@ -53,6 +53,8 @@
       // Only the option label; the reason is kept out to keep the box tiny.
       box.dir = "auto";
       box.textContent = state.answer;
+      // A cross (access denied or pull failed) shows in red.
+      box.classList.toggle("error", state.answer === "✗");
     } else {
       // Every failure is a bare "-"; the reason is only in the service worker log.
       box.classList.add("error");
