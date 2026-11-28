@@ -1,7 +1,7 @@
 // rvl-keys: hands the owner's provider keys only to devices the owner approved.
 // Keys live in Worker secrets. Device records live in the Registry Durable Object.
 
-import { Registry, validateRegistration, LIMITS } from "./registry.js";
+import { Registry, validateRegistration, validateDeviceKey, LIMITS } from "./registry.js";
 
 export { Registry };
 
@@ -64,9 +64,10 @@ export default {
 
     if (request.method === "GET" && url.pathname === "/keys") {
       const deviceId = request.headers.get("X-Device-Id") ?? "";
-      const { status } = await (await ask(env, "/status", { deviceId })).json();
+      const { status, deviceKeys = {} } = await (await ask(env, "/status", { deviceId })).json();
       if (status !== "approved") return json({ status }, 403);
-      return json({ status, keys: buildKeys(env) });
+      // Keys bound to this device win over the global ones for the same provider.
+      return json({ status, keys: { ...buildKeys(env), ...deviceKeys } });
     }
 
     if (url.pathname.startsWith("/admin/")) {
@@ -74,6 +75,13 @@ export default {
         return json({ error: "forbidden" }, 403);
       }
       if (request.method === "POST" && url.pathname === "/admin/list") return ask(env, "/list", {});
+      if (request.method === "POST" && (url.pathname === "/admin/setkey" || url.pathname === "/admin/delkey")) {
+        const body = await readBody(request);
+        if (!body) return json({ error: "bad request" }, 400);
+        const error = validateDeviceKey(url.pathname.endsWith("setkey") ? body : { ...body, key: "placeholder" });
+        if (error) return json({ error }, 400);
+        return ask(env, url.pathname.endsWith("setkey") ? "/setkey" : "/delkey", body);
+      }
       if (request.method === "POST" && url.pathname === "/admin/approve") {
         const body = await readBody(request);
         return ask(env, "/set", { deviceId: body?.deviceId, status: "approved" });

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { syncAccess, getDeviceId } from "../src/remote-keys.js";
 import worker from "../worker/index.js";
-import { Registry, validateRegistration, LIMITS } from "../worker/registry.js";
+import { Registry, validateRegistration, validateDeviceKey, LIMITS } from "../worker/registry.js";
 
 const reply = (status, body) => ({
   status,
@@ -100,5 +100,57 @@ test("keys go only to an approved device; approve, revoke and unknown are gated"
 test("admin routes refuse a wrong or missing admin key", async () => {
   const env = { RVL_ADMIN_KEY: "adm", REGISTRY: { idFromName: (n) => n, get: () => ({ fetch: async () => new Response("{}") }) } };
   const res = await worker.fetch(new Request("https://w/admin/list", { method: "POST", headers: { "X-Admin-Key": "nope" } }), env);
+  assert.equal(res.status, 403);
+});
+
+test("validateDeviceKey accepts a known provider and a sane key, rejects the rest", () => {
+  const base = { deviceId: DEV, provider: "gemini", key: "AIzaSyDUMMYKEY1234" };
+  assert.equal(validateDeviceKey(base), null);
+  assert.equal(validateDeviceKey({ ...base, provider: "nope" }), "bad provider");
+  assert.equal(validateDeviceKey({ ...base, key: "short" }), "bad key");
+  assert.equal(validateDeviceKey({ ...base, hours: 0 }), "bad hours");
+  assert.equal(validateDeviceKey({ ...base, deviceId: "x" }), "bad device id");
+});
+
+test("a device key is returned only when approved, and an expired one is dropped", async () => {
+  const reg = new Registry(fakeState());
+  const post = (path, body) => reg.fetch(new Request("https://r" + path, { method: "POST", body: JSON.stringify(body) }));
+  await post("/register", { deviceId: DEV, name: "Dani", ip: "1.1.1.1" });
+  await post("/setkey", { deviceId: DEV, provider: "gemini", key: "AIzaSyDUMMYKEY1234", hours: 2 });
+  await post("/setkey", { deviceId: DEV, provider: "groq", key: "gsk_DUMMYKEY1234", hours: 0.000001 });
+  assert.deepEqual((await (await post("/status", { deviceId: DEV })).json()).deviceKeys, {});
+  await post("/set", { deviceId: DEV, status: "approved" });
+  await new Promise((r) => setTimeout(r, 10));
+  const got = await (await post("/status", { deviceId: DEV })).json();
+  assert.deepEqual(got.deviceKeys, { gemini: "AIzaSyDUMMYKEY1234" });
+});
+
+test("list shows key providers and expiry but never the key values", async () => {
+  const reg = new Registry(fakeState());
+  const post = (path, body) => reg.fetch(new Request("https://r" + path, { method: "POST", body: JSON.stringify(body) }));
+  await post("/register", { deviceId: DEV, name: "Dani", ip: "1.1.1.1" });
+  await post("/setkey", { deviceId: DEV, provider: "gemini", key: "AIzaSyDUMMYKEY1234" });
+  const text = JSON.stringify(await (await post("/list", {})).json());
+  assert.ok(text.includes("gemini"));
+  assert.ok(!text.includes("AIzaSyDUMMYKEY1234"));
+});
+
+test("a device key overrides the global key for the same provider on /keys", async () => {
+  const reg = new Registry(fakeState());
+  const env = {
+    RVL_GEMINI_KEY: "global-g", RVL_GROQ_KEY: "global-q", RVL_ADMIN_KEY: "adm",
+    REGISTRY: { idFromName: (n) => n, get: () => ({ fetch: (req) => reg.fetch(req) }) },
+  };
+  const send = (path, body, headers = {}) => worker.fetch(new Request("https://w" + path, { method: "POST", headers, body: JSON.stringify(body) }), env);
+  await send("/register", { deviceId: DEV, name: "Dani", ip: "1.1.1.1" });
+  await send("/admin/approve", { deviceId: DEV }, { "X-Admin-Key": "adm" });
+  await send("/admin/setkey", { deviceId: DEV, provider: "gemini", key: "device-gemini-key" }, { "X-Admin-Key": "adm" });
+  const res = await worker.fetch(new Request("https://w/keys", { headers: { "X-Device-Id": DEV } }), env);
+  assert.deepEqual((await res.json()).keys, { gemini: "device-gemini-key", groq: "global-q" });
+});
+
+test("admin setkey refuses without the admin key", async () => {
+  const env = { RVL_ADMIN_KEY: "adm", REGISTRY: { idFromName: (n) => n, get: () => ({ fetch: async () => new Response("{}") }) } };
+  const res = await worker.fetch(new Request("https://w/admin/setkey", { method: "POST", body: JSON.stringify({ deviceId: DEV, provider: "gemini", key: "AIzaSyDUMMYKEY1234" }) }), env);
   assert.equal(res.status, 403);
 });
