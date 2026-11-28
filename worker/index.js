@@ -1,7 +1,10 @@
-// rvl-keys: hands the owner's provider keys only to devices the owner approved.
-// Keys live in Worker secrets. Device records live in the Registry Durable Object.
+// rvl-keys: hands provider keys only to devices the owner approved.
+// Keys come from three layers: Worker secrets (global), global keys set in the
+// admin page, and per-device keys. A device key beats a global one for the same
+// provider. Device records and admin-set keys live in the Registry Durable Object.
 
-import { Registry, validateRegistration, validateDeviceKey, LIMITS } from "./registry.js";
+import { Registry, validateRegistration, validateDeviceKey, validateKeyFields, validateName, PROVIDER_IDS, LIMITS } from "./registry.js";
+import { ADMIN_HTML } from "./admin-page.js";
 
 export { Registry };
 
@@ -53,6 +56,17 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    // The page holds no secrets. Every action on it sends the admin key itself.
+    if (request.method === "GET" && url.pathname === "/admin") {
+      return new Response(ADMIN_HTML, {
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "no-store",
+          "content-security-policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'",
+        },
+      });
+    }
+
     if (request.method === "POST" && url.pathname === "/register") {
       const body = await readBody(request);
       if (!body) return json({ error: "bad request" }, 400);
@@ -73,29 +87,45 @@ export default {
       const deviceId = request.headers.get("X-Device-Id") ?? "";
       const { status, deviceKeys = {} } = await (await ask(env, "/status", { deviceId })).json();
       if (status !== "approved") return json({ status }, 403);
-      // Keys bound to this device win over the global ones for the same provider.
-      return json({ status, keys: { ...buildKeys(env), ...deviceKeys } });
+      const globalKeys = await (await ask(env, "/globals", {})).json();
+      return json({ status, keys: { ...buildKeys(env), ...globalKeys, ...deviceKeys } });
     }
 
     if (url.pathname.startsWith("/admin/")) {
       if (!env.RVL_ADMIN_KEY || request.headers.get("X-Admin-Key") !== env.RVL_ADMIN_KEY) {
         return json({ error: "forbidden" }, 403);
       }
-      if (request.method === "POST" && url.pathname === "/admin/list") return ask(env, "/list", {});
-      if (request.method === "POST" && (url.pathname === "/admin/setkey" || url.pathname === "/admin/delkey")) {
-        const body = await readBody(request);
-        if (!body) return json({ error: "bad request" }, 400);
-        const error = validateDeviceKey(url.pathname.endsWith("setkey") ? body : { ...body, key: "placeholder" });
+      if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
+      const body = (await readBody(request)) ?? {};
+
+      if (url.pathname === "/admin/list") return ask(env, "/list", {});
+
+      if (url.pathname === "/admin/approve") return ask(env, "/set", { deviceId: body.deviceId, status: "approved" });
+      if (url.pathname === "/admin/revoke") return ask(env, "/set", { deviceId: body.deviceId, status: "revoked" });
+
+      if (url.pathname === "/admin/rename") {
+        if (!validateName(body.name)) return json({ error: "bad name" }, 400);
+        return ask(env, "/rename", { deviceId: body.deviceId, name: body.name });
+      }
+
+      if (url.pathname === "/admin/setkey") {
+        const error = validateDeviceKey(body);
         if (error) return json({ error }, 400);
-        return ask(env, url.pathname.endsWith("setkey") ? "/setkey" : "/delkey", body);
+        return ask(env, "/setkey", body);
       }
-      if (request.method === "POST" && url.pathname === "/admin/approve") {
-        const body = await readBody(request);
-        return ask(env, "/set", { deviceId: body?.deviceId, status: "approved" });
+      if (url.pathname === "/admin/delkey") {
+        if (typeof body.deviceId !== "string" || !PROVIDER_IDS.includes(body.provider)) return json({ error: "bad request" }, 400);
+        return ask(env, "/delkey", body);
       }
-      if (request.method === "POST" && url.pathname === "/admin/revoke") {
-        const body = await readBody(request);
-        return ask(env, "/set", { deviceId: body?.deviceId, status: "revoked" });
+
+      if (url.pathname === "/admin/setglobal") {
+        const error = validateKeyFields(body);
+        if (error) return json({ error }, 400);
+        return ask(env, "/setglobal", body);
+      }
+      if (url.pathname === "/admin/delglobal") {
+        if (!PROVIDER_IDS.includes(body.provider)) return json({ error: "bad provider" }, 400);
+        return ask(env, "/delglobal", body);
       }
     }
 

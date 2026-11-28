@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { syncAccess, getDeviceId, checkAccess, pullKeys } from "../src/remote-keys.js";
 import worker from "../worker/index.js";
 import { Registry, validateRegistration, validateDeviceKey, LIMITS } from "../worker/registry.js";
+import { ADMIN_HTML } from "../worker/admin-page.js";
 
 const reply = (status, body) => ({
   status,
@@ -199,4 +200,46 @@ test("the status endpoint never returns keys, even for an approved device", asyn
   const res = await worker.fetch(new Request("https://w/status", { headers: { "X-Device-Id": DEV } }), env);
   const body = await res.json();
   assert.deepEqual(body, { status: "approved" });
+});
+
+test("keys merge in order: Worker secret, then global key, then device key", async () => {
+  const reg = new Registry(fakeState());
+  const env = {
+    RVL_GEMINI_KEY: "env-g", RVL_ADMIN_KEY: "adm",
+    REGISTRY: { idFromName: (n) => n, get: () => ({ fetch: (req) => reg.fetch(req) }) },
+  };
+  const admin = (path, body) => worker.fetch(new Request("https://w" + path, { method: "POST", headers: { "X-Admin-Key": "adm" }, body: JSON.stringify(body) }), env);
+  const pull = () => worker.fetch(new Request("https://w/keys", { headers: { "X-Device-Id": DEV } }), env);
+  await worker.fetch(new Request("https://w/register", { method: "POST", body: JSON.stringify({ deviceId: DEV, name: "Dani", ip: "1.1.1.1" }) }), env);
+  await admin("/admin/approve", { deviceId: DEV });
+  assert.equal((await (await pull()).json()).keys.gemini, "env-g");
+  await admin("/admin/setglobal", { provider: "gemini", key: "global-gemini-key" });
+  assert.equal((await (await pull()).json()).keys.gemini, "global-gemini-key");
+  await admin("/admin/setkey", { deviceId: DEV, provider: "gemini", key: "device-gemini-key" });
+  assert.equal((await (await pull()).json()).keys.gemini, "device-gemini-key");
+});
+
+test("admin list shows names, tails and expiry for devices and globals, never values", async () => {
+  const reg = new Registry(fakeState());
+  const env = { RVL_ADMIN_KEY: "adm", REGISTRY: { idFromName: (n) => n, get: () => ({ fetch: (req) => reg.fetch(req) }) } };
+  const admin = (path, body) => worker.fetch(new Request("https://w" + path, { method: "POST", headers: { "X-Admin-Key": "adm" }, body: JSON.stringify(body) }), env);
+  await worker.fetch(new Request("https://w/register", { method: "POST", body: JSON.stringify({ deviceId: DEV, name: "Dani", ip: "1.1.1.1" }) }), env);
+  await admin("/admin/rename", { deviceId: DEV, name: "Dani laptop" });
+  await admin("/admin/setkey", { deviceId: DEV, provider: "groq", key: "gsk_SECRETVALUE1234", hours: 4 });
+  await admin("/admin/setglobal", { provider: "openai", key: "sk-GLOBALVALUE9999" });
+  const data = await (await admin("/admin/list", {})).json();
+  assert.equal(data.devices[DEV].name, "Dani laptop");
+  assert.equal(data.devices[DEV].keys.groq.tail, "1234");
+  assert.ok(data.devices[DEV].keys.groq.expires > Date.now());
+  assert.equal(data.globals.openai.tail, "9999");
+  const text = JSON.stringify(data);
+  assert.ok(!text.includes("SECRETVALUE") && !text.includes("GLOBALVALUE"));
+});
+
+test("the admin page is served as HTML and holds no key values", async () => {
+  const res = await worker.fetch(new Request("https://w/admin"), {});
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get("content-type"), /text\/html/);
+  assert.match(await res.text(), /rvl admin/);
+  assert.ok(ADMIN_HTML.includes("X-Admin-Key"));
 });
