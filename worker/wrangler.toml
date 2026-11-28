@@ -8,4 +8,4 @@ class_name = "Registry"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["Registry"]
+new_sqlite_classes = ["Registry"]
