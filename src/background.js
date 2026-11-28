@@ -14,6 +14,8 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
   syncNow();
 });
 
+// The toolbar icon opens the settings page.
+chrome.action.onClicked.addListener(() => chrome.runtime.openOptionsPage());
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId !== MENU_ID || !tab?.id) return;
